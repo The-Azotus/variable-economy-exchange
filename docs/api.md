@@ -133,7 +133,7 @@ These come from core's API, and are described in [core's add-on guide](https://g
 
 ## Changelog
 
-- **0.6.1 (unreleased):** the exchange is its own repository and release; nothing in its API changed.
+- **0.6.1 (2026-11-17):** the exchange is its own repository and release; nothing in its API changed.
 
 - **0.6.0 (2026-11-14):** breaks every add-on. The mod is renamed from Dynamic-Economy to Variable Economy and split into four mods; [core's add-on guide](https://github.com/The-Azotus/variable-economy-core/blob/main/docs/api.md#changelog) lists the whole change. For the exchange:
   - the exchange is a separate optional mod, `variable_economy_exchange`, with its own artifact, `exchange`. Check its mod ID before using its package.

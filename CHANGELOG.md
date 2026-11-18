@@ -2,7 +2,7 @@
 
 What changed in each release of the exchange, for players and server admins. Mod and add-on authors: the API's changes are in the [add-on guide's changelog](docs/api.md#changelog). Changes to core, and to Variable Economy as a whole, are in [core's changelog](https://github.com/The-Azotus/variable-economy-core/blob/main/CHANGELOG.md).
 
-## 0.6.1 (unreleased)
+## 0.6.1 (2026-11-17)
 
 - The exchange now lives in its own repository; nothing changes in game.
 - The mod's jar no longer contains its test code.
