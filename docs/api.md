@@ -21,7 +21,7 @@ The exchange is an optional add-on on top of core: a server may have core withou
 
 ## Depending on the exchange
 
-The mods are distributed on CurseForge, and you can depend on the released jars through [CurseMaven](https://www.cursemaven.com/), with the repository block from core's guide: core 0.6.1 is `curse.maven:variable-economy-1818087:9710072`. CurseMaven serves only the mod jars, without sources or javadoc.
+The mods are distributed on CurseForge, and you can depend on the released jars through [CurseMaven](https://www.cursemaven.com/), with the repository block from core's guide. The exchange is CurseForge project **1818114**; the exchange 0.6.1 is `curse.maven:variable-economy-exchange-1818114:9717539`, and core 0.6.1 is `curse.maven:variable-economy-1818087:9710072`. Use those in place of the `variableeconomy:` coordinates below. CurseMaven serves only the mod jars, without sources or javadoc.
 
 For the sources and javadoc, publish them to your local Maven from source. Clone this repository, check out the release you target (tags start with `v`, such as `v0.6.1`), and run `gradlew publishToMavenLocal`. That publishes `variableeconomy:exchange:<version>`, with the version without the `v` (`0.6.1`), and a sources jar and a javadoc jar beside it, so your IDE shows the javadoc and the source. The javadoc covers only the exchange's API package. The exchange's artifact doesn't bring core with it: publish core the same way from [its repository](https://github.com/The-Azotus/variable-economy-core), and depend on both. Core's add-on guide explains the setup in full.
 
