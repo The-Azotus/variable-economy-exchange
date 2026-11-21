@@ -67,8 +67,8 @@ The build needs Java 21; Gradle's toolchain finds it, or downloads it. The Gradl
 
 The exchange builds against core. `gradle.properties` says which core and where from:
 
-- `core_source=local` (the default until core is on CurseForge) uses `variableeconomy:core:<core_version>` from your local Maven. Clone [variable-economy-core](https://github.com/The-Azotus/variable-economy-core) and run `gradlew publishToMavenLocal` there first.
-- `core_source=curseforge` will use the released jar through CurseMaven, once `core_curseforge_project` and `core_curseforge_file` are filled in. `-Pcore_source=local` overrides it.
+- `core_source=curseforge` (the default) uses the released core that `core_curseforge_project` and `core_curseforge_file` name, through [CurseMaven](https://www.cursemaven.com/): core 0.6.1 is `curse.maven:variable-economy-1818087:9710072`.
+- `core_source=local` uses `variableeconomy:core:<core_version>` from your local Maven instead, for building against a core that isn't released: clone [variable-economy-core](https://github.com/The-Azotus/variable-economy-core), check out what you want, and run `gradlew publishToMavenLocal` there first. `-Pcore_source=local` sets it for one build.
 
 Then:
 
