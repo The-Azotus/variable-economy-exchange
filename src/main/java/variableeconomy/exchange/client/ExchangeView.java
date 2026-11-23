@@ -130,7 +130,7 @@ final class ExchangeView {
                     listingSort = listingSort.next();
                     screen.listDirty = true;
                 })
-                .bounds(x + screen.priceX, y + screen.priceY - 1, Math.max(screen.priceWidth, 90), 16)
+                .bounds(x + screen.sortX, y + screen.sortY, screen.sortWidth, 16)
                 .tooltip(Tooltip.create(Component.translatable("screen.variable_economy_exchange.exchange.sort.tooltip")))
                 .build());
         // Asks for the exchange as the screen opens, and again after a resize.
@@ -272,7 +272,7 @@ final class ExchangeView {
                     order.mine() ? Component.translatable("screen.variable_economy_exchange.exchange.listing.you").getString() : order.poster(),
                     PriceFormat.count(order.quantity()), PriceFormat.amount(order.price())));
             if (order.daysLeft() >= 0) {
-                lines.add(Component.translatable("screen.variable_economy_exchange.exchange.order.days", order.daysLeft()).withColor(TEXT_DIM));
+                lines.add(days(order.daysLeft()).withColor(TEXT_DIM));
             }
             lines.add(Component.translatable(order.mine() ? "screen.variable_economy_exchange.exchange.book.click"
                     : row.ask() ? "screen.variable_economy_exchange.exchange.book.click_buy" : "screen.variable_economy_exchange.exchange.book.click_sell")
@@ -545,7 +545,10 @@ final class ExchangeView {
             screen.quantityNoteFor = screen.quantityValue();
             return;
         }
-        screen.setQuantity(Math.min(held, quantityLimit()), Component.empty());
+        // With another player's buy order picked, All fills it: at most the units it still wants.
+        ExchangeService.BookOrder picked = selectedBookOrder();
+        int limit = picked != null && !isAsk(picked) ? Math.min(quantityLimit(), picked.quantity()) : quantityLimit();
+        screen.setQuantity(Math.min(held, limit), Component.empty());
     }
 
     /** Why the order can't be posted, as far as the client can tell, or null if it looks fine. The server re-checks. */
@@ -568,6 +571,9 @@ final class ExchangeView {
             problem = "no_funds";
         } else if (!buy && exchangeSelected != null && freshHeld(exchangeSelected) < qty) {
             problem = "not_enough_items";
+        } else if (!buy && fee() > 0 && !ClientExchangeState.looksAffordable(fee())) {
+            // Posting a sell order takes the fee from the account before the items.
+            problem = "no_funds";
         } else {
             return null;
         }
@@ -612,10 +618,23 @@ final class ExchangeView {
             problem = "order_limit";
         } else if (heldLike(listStack) < qty) {
             problem = "not_enough_items";
+        } else if (fee() > 0 && !ClientExchangeState.looksAffordable(fee())) {
+            problem = "no_funds";
         } else {
             return null;
         }
         return Component.translatable("screen.variable_economy_exchange.result." + problem);
+    }
+
+    /** "1 day" or "N days". */
+    private static net.minecraft.network.chat.MutableComponent days(long days) {
+        return Component.translatable(days == 1 ? "screen.variable_economy_exchange.exchange.order.day"
+                : "screen.variable_economy_exchange.exchange.order.days", days);
+    }
+
+    private static long saturatedAdd(long a, long b) {
+        long sum = a + b;
+        return ((a ^ sum) & (b ^ sum)) < 0 ? Long.MAX_VALUE : sum;
     }
 
     /** The buyer's tax as a fraction, as the server last said. */
@@ -650,8 +669,10 @@ final class ExchangeView {
                 long total = qty > 0 && each > 0 ? checkedTotal(each, qty).orElse(0) : 0;
                 long tax = ExchangeService.tax(total, exchange == null ? 0 : exchange.tax());
                 long fee = exchange == null ? 0 : exchange.listingFee();
+                // A buy order's button shows what posting it takes from the account: the money it holds, tax included, and the fee.
+                long charged = saturatedAdd(saturatedAdd(total, tax), fee);
                 postBuyButton.setMessage(total > 0 && exchangeSelected != null
-                        ? Component.translatable("screen.variable_economy_exchange.exchange.buy_for", PriceFormat.amount(qty), PriceFormat.amount(total))
+                        ? Component.translatable("screen.variable_economy_exchange.exchange.buy_for", PriceFormat.amount(qty), PriceFormat.amount(charged))
                         : Component.translatable("screen.variable_economy_exchange.exchange.buy"));
                 postSellButton.setMessage(total > 0 && exchangeSelected != null
                         ? Component.translatable("screen.variable_economy_exchange.exchange.sell_for", PriceFormat.amount(qty), PriceFormat.amount(total))
@@ -1003,7 +1024,7 @@ final class ExchangeView {
         lines.add((line.mine() ? Component.translatable("screen.variable_economy_exchange.exchange.listing.yours")
                 : Component.translatable("screen.variable_economy_exchange.exchange.listing.by", line.seller())).withColor(TEXT_DIM));
         if (line.daysLeft() >= 0) {
-            lines.add(Component.translatable("screen.variable_economy_exchange.exchange.order.days", line.daysLeft()).withColor(TEXT_DIM));
+            lines.add(days(line.daysLeft()).withColor(TEXT_DIM));
         }
         return lines;
     }
@@ -1044,16 +1065,19 @@ final class ExchangeView {
             screen.infoLine(graphics, "exchange.order.price", PriceFormat.amount(line.price()), TEXT_MONEY, left, right, top + INFO_LINE_HEIGHT);
             screen.infoLine(graphics, "exchange.listing.left", PriceFormat.count(line.remaining()), TEXT, left, right, top + 2 * INFO_LINE_HEIGHT);
             Component expires = line.daysLeft() < 0 ? Component.translatable("screen.variable_economy_exchange.exchange.order.never")
-                    : Component.translatable("screen.variable_economy_exchange.exchange.order.days", line.daysLeft());
+                    : days(line.daysLeft());
             screen.infoLine(graphics, "exchange.order.expires", expires.getString(), TEXT_DIM, left, right, top + 3 * INFO_LINE_HEIGHT);
             renderItemDetails(graphics, line.stack(), left, top + 4 * INFO_LINE_HEIGHT + 4, y + screen.priceY - 4);
         } else {
             Component summary = Component.translatable("screen.variable_economy_exchange.exchange.listing.summary", name, PriceFormat.amount(line.price()),
                     PriceFormat.count(line.remaining()), line.seller());
-            graphics.drawString(screen.font(), screen.font().plainSubstrByWidth(summary.getString(), screen.panelWidth - 20), left + 20, y + screen.panelY + 4, TEXT, false);
+            // The Sort button shares this row on a narrow window.
+            graphics.drawString(screen.font(), screen.font().plainSubstrByWidth(summary.getString(), screen.panelWidth - 20 - screen.sortWidth - 4),
+                    left + 20, y + screen.panelY + 4, TEXT, false);
         }
         int qty = screen.quantityValue();
-        long total = qty > 0 ? checkedTotal(line.price(), qty).orElse(0) : 0;
+        ExchangePayloads.Exchange state = ClientExchangeState.exchange();
+        long total = qty > 0 ? ExchangeService.withTax(checkedTotal(line.price(), qty).orElse(0), state == null ? 0 : state.tax()).orElse(0) : 0;
         Component note = !screen.quantityNote.getString().isEmpty() ? screen.quantityNote
                 : total > 0 ? Component.translatable("screen.variable_economy_exchange.exchange.listing.total", PriceFormat.amount(total)) : Component.empty();
         graphics.drawString(screen.font(), screen.font().plainSubstrByWidth(note.getString(), screen.noteWidth), x + screen.noteX, y + screen.noteY, TEXT_DIM, false);
@@ -1240,7 +1264,7 @@ final class ExchangeView {
         }
         graphics.renderItem(new ItemStack(BuiltInRegistries.ITEM.get(line.item())), left, y + screen.panelY);
         Component expires = line.daysLeft() < 0 ? Component.translatable("screen.variable_economy_exchange.exchange.order.never")
-                : Component.translatable("screen.variable_economy_exchange.exchange.order.days", line.daysLeft());
+                : days(line.daysLeft());
         if (!screen.wide) {
             Component summary = Component.translatable("screen.variable_economy_exchange.exchange.order.summary", displayName(line.item()),
                     PriceFormat.amount(line.price()), PriceFormat.count(line.filled()), PriceFormat.count(line.quantity()));
@@ -1283,17 +1307,19 @@ final class ExchangeView {
         screen.infoLine(graphics, "exchange.order.holds", Component.translatable("screen.variable_economy_exchange.exchange.order.items",
                 PriceFormat.count(line.remaining())).getString(), TEXT, left, right, top + 3 * INFO_LINE_HEIGHT);
         Component expires = line.daysLeft() < 0 ? Component.translatable("screen.variable_economy_exchange.exchange.order.never")
-                : Component.translatable("screen.variable_economy_exchange.exchange.order.days", line.daysLeft());
+                : days(line.daysLeft());
         screen.infoLine(graphics, "exchange.order.expires", expires.getString(), TEXT_DIM, left, right, top + 4 * INFO_LINE_HEIGHT);
         renderItemDetails(graphics, line.stack(), left, top + 5 * INFO_LINE_HEIGHT + 4, y + screen.tradeY - 4);
     }
 
     /** Wrapped help text from {@code top} down to the controls. */
     private void renderHelp(GuiGraphics graphics, Component text, int left, int top) {
-        List<net.minecraft.util.FormattedCharSequence> lines = screen.font().split(text, screen.panelWidth);
-        // Above the price box when it shows, otherwise above the button; one line when narrow.
+        // On a narrow window the Listings view's Sort button shares the help's one line.
+        int width = !screen.wide && exchangeMode == ExchangeMode.LISTINGS ? screen.panelWidth - screen.sortWidth - 4 : screen.panelWidth;
+        List<net.minecraft.util.FormattedCharSequence> lines = screen.font().split(text, width);
+        // Above the price box or the Sort button when one shows, otherwise above the button; one line when narrow.
         int bottom = screen.topPos() + (!screen.wide ? screen.panelY + 14 : exchangeMode == ExchangeMode.ITEMS || exchangeMode == ExchangeMode.LIST ? screen.priceY - 2
-                : exchangeMode == ExchangeMode.LISTINGS ? screen.controlsY - 2 : screen.tradeY - 2);
+                : exchangeMode == ExchangeMode.LISTINGS ? screen.sortY - 2 : screen.tradeY - 2);
         for (int i = 0; i < lines.size() && top + i * 10 + 9 <= bottom; i++) {
             graphics.drawString(screen.font(), lines.get(i), left, top + i * 10, TEXT_DIM, false);
         }

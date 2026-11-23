@@ -118,6 +118,15 @@ public final class ExchangeService {
      * viewer, and the days until it expires (-1 when posts don't expire).
      */
     public record BookOrder(long id, long price, int quantity, String poster, boolean mine, long daysLeft) {
+        /** The longest poster name the book carries: a player name's limit. */
+        public static final int MAX_POSTER_LENGTH = 16;
+
+        /** Cuts an unusually long name (possible behind some proxies) to fit, so it can't make the book fail to send. */
+        public BookOrder {
+            if (poster.length() > MAX_POSTER_LENGTH) {
+                poster = poster.substring(0, MAX_POSTER_LENGTH);
+            }
+        }
     }
 
     /** An item's book as one player sees it, best price first, then oldest, at most {@code depth} orders a side. */
@@ -387,12 +396,16 @@ public final class ExchangeService {
      * Trades {@code units} between a buy order and a sell order at {@code price}, both already checked: the buy order's
      * held money pays the value and its tax, the seller is paid the value, the units go to the buyer's box, and each
      * order on the book is updated (an incoming one is the caller's to keep). The side not making the request is told.
-     * The tax never takes a buy order below nothing, nor is it ever below 0 (an order saved before the tax moved to buyers,
-     * or posted before an admin raised the tax, holds less tax than it now owes).
+     * The tax is never below 0, and never takes money the buy order still needs for its other units at its own bid: an
+     * order posted before an admin raised the tax (or saved before the tax moved to buyers) holds less tax than it now
+     * owes, so its fills pay only the tax it can spare, and its held money never falls below what its remaining units
+     * cost.
      */
     private static Trade trade(MinecraftServer server, ExchangeData data, Order buyOrder, Order sellOrder, int units, long price, double rate) {
         long value = price * units;
-        long tax = Math.max(0, Math.min(taxOnMore(buyOrder.traded(), value, rate), buyOrder.held() - value));
+        // The order's bid for the units it will still want after this fill; the order held this much when posted.
+        long reserved = buyOrder.price() * (long) (buyOrder.remaining() - units);
+        long tax = Math.max(0, Math.min(taxOnMore(buyOrder.traded(), value, rate), buyOrder.held() - value - reserved));
         // The order making the request isn't on the book yet; the other one is.
         boolean buyResting = data.find(buyOrder.id()).isPresent();
         Order bought = buyOrder.withFill(units, value, value + tax);
@@ -759,6 +772,10 @@ public final class ExchangeService {
     /** Collects the plain items {@code only} names (everything when empty) and the given parcels. */
     private static Outcome collect(ServerPlayer player, ExchangeData data, Optional<ResourceLocation> only, List<Parcel> parcels) {
         requireServerThread(player);
+        if (!player.isAlive() || player.isRemoved()) {
+            // A dead player's inventory is never copied to them on respawn, so anything put there would be lost.
+            return Outcome.fail(Action.COLLECT, ExchangeResult.NO_SPACE, none());
+        }
         Map<ResourceLocation, Long> box = new LinkedHashMap<>(data.box(player.getUUID()));
         if (only.isPresent()) {
             box.keySet().retainAll(Set.of(only.get()));

@@ -161,4 +161,63 @@ public final class ExchangeFillTests {
         });
         helper.succeed();
     }
+
+    /**
+     * An admin raises the tax while a buy order waits. Its fills pay only the tax the order can spare beyond what its
+     * remaining units cost, so its held money never goes below 0, every unit is still paid for in full, and the tax
+     * counted as destroyed is exactly what the buyer paid beyond what the sellers got.
+     */
+    @GameTest(template = EMPTY)
+    public static void aRaisedTaxNeverTakesMoneyLaterUnitsNeed(GameTestHelper helper) {
+        withoutMatching(() -> {
+            ExchangeData data = new ExchangeData();
+            CoreFixture buyer = new CoreFixture(helper);
+            CoreFixture first = new CoreFixture(helper);
+            CoreFixture second = new CoreFixture(helper);
+            buyer.deposit(1000);
+            first.give(new ItemStack(Items.COBBLESTONE, 1));
+            second.give(new ItemStack(Items.COBBLESTONE, 1));
+            long bid = posted(helper, buyer, data, Items.COBBLESTONE, true, 100, 3).orderId();
+            helper.assertValueEqual(buyer.balance(), 1000 - 315, "3 × 100 and 5% tax held");
+
+            ExchangeConfig.BUYER_TAX_PERCENT.set(50.0);
+            helper.assertValueEqual(fill(first, data, bid, 1).result(), ExchangeResult.OK, "first unit");
+            helper.assertTrue(data.find(bid).orElseThrow().held() >= 200, "still holds the two units it wants: "
+                    + data.find(bid).orElseThrow().held());
+            helper.assertValueEqual(fill(second, data, bid, 1).result(), ExchangeResult.OK, "second unit");
+            long held = data.find(bid).orElseThrow().held();
+            helper.assertTrue(held >= 100, "still holds the last unit's price: " + held);
+            helper.assertValueEqual(first.balance() + second.balance(), 200, "each seller gets the whole price");
+            helper.assertValueEqual(1000L - buyer.balance() - held, 200L + data.taxCollected(),
+                    "what the buyer gave up is what sellers got plus the tax counted");
+
+            helper.assertValueEqual(ExchangeService.cancel(buyer.player, data, bid).result(), ExchangeResult.OK, "cancelled");
+            helper.assertValueEqual(1000L - buyer.balance(), 200L + data.taxCollected(), "the rest comes back");
+            buyer.account().deduct(buyer.balance());
+            first.account().deduct(first.balance());
+            second.account().deduct(second.balance());
+        });
+        helper.succeed();
+    }
+
+    /** A dead player's collect does nothing: their inventory is never given back to them on respawn. */
+    @GameTest(template = EMPTY)
+    public static void aDeadPlayerCantCollect(GameTestHelper helper) {
+        withExchange(() -> {
+            ExchangeData data = new ExchangeData();
+            CoreFixture f = new CoreFixture(helper);
+            data.addToBox(f.player.getUUID(), id(Items.DIAMOND), 5);
+            f.player.setHealth(0);
+            helper.assertTrue(!ExchangeService.collect(f.player, data, java.util.Optional.empty()).ok(), "refused");
+            helper.assertValueEqual(boxed(data, f, Items.DIAMOND), 5L, "still in the box");
+            helper.assertValueEqual(f.count(Items.DIAMOND), 0L, "nothing given");
+        });
+        helper.succeed();
+    }
+
+    @GameTest(template = EMPTY)
+    public static void theExchangeIsOnByDefault(GameTestHelper helper) {
+        helper.assertTrue(ExchangeConfig.ENABLED.getDefault(), "exchange.enabled defaults to true");
+        helper.succeed();
+    }
 }

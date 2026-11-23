@@ -54,9 +54,13 @@ public final class ExchangeSync {
                 .toList();
     }
 
-    /** Whether {@code player} has the exchange open, so their request may be handled. */
+    /**
+     * Whether {@code player} has the exchange open, so their request may be handled. A dead player's isn't: vanilla
+     * keeps the screen open through death, until they respawn.
+     */
     private static boolean viewing(ServerPlayer player) {
-        return player.containerMenu instanceof ExchangeMenu menu && menu.stillValid(player);
+        return player.containerMenu instanceof ExchangeMenu menu && menu.stillValid(player)
+                && player.isAlive() && !player.isRemoved();
     }
 
     /** Call right after the exchange screen opens. */
