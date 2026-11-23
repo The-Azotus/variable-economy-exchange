@@ -232,14 +232,9 @@ public final class ExchangeService {
         }
     }
 
-    /** A player's name: online, or as the server last saw them. */
+    /** A player's name, online or not, from everything core knows (including names the server's cache has forgotten). */
     public static Optional<String> name(MinecraftServer server, UUID id) {
-        ServerPlayer online = server.getPlayerList().getPlayer(id);
-        if (online != null) {
-            return Optional.of(online.getGameProfile().getName());
-        }
-        return server.getProfileCache() == null ? Optional.empty()
-                : server.getProfileCache().get(id).map(com.mojang.authlib.GameProfile::getName);
+        return CoreApi.accounts().name(server, id);
     }
 
     private static void requireServerThread(ServerPlayer player) {

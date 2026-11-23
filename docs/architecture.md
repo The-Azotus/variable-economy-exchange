@@ -12,7 +12,7 @@ The build is in `buildSrc`'s convention plugin, `variable-economy.mod` (`buildSr
 
 **Core.** The exchange builds against core, which `gradle.properties` names:
 
-- `core_source=curseforge` (the default) uses the released core that `core_curseforge_project` and `core_curseforge_file` name, through [CurseMaven](https://www.cursemaven.com/): for example, core 0.6.1 is `curse.maven:variable-economy-1818087:9710072`. This mod requires core 0.6.2 or later, so until that core's file is set here, build with `-Pcore_source=local`.
+- `core_source=curseforge` (the default) uses the released core that `core_curseforge_project` and `core_curseforge_file` name, through [CurseMaven](https://www.cursemaven.com/): for example, core 0.6.1 is `curse.maven:variable-economy-1818087:9710072`. This mod requires core 0.6.3 or later, so until that core's file is set here, build with `-Pcore_source=local`.
 - `core_source=local` uses `variableeconomy:core:<core_version>` from your local Maven instead, for building against a core that isn't released: clone [variable-economy-core](https://github.com/The-Azotus/variable-economy-core), check out what you want, and run `gradlew publishToMavenLocal` there first. `-Pcore_source=local` sets it for one build.
 
 The main code compiles against core (`compileOnly`); the GameTests get it as an implementation dependency, and the dev runs load it.
