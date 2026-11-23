@@ -1,7 +1,6 @@
 package variableeconomy.exchange.network;
 
 import variableeconomy.exchange.ExchangeSettings;
-import com.mojang.authlib.GameProfile;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket;
 import net.minecraft.resources.ResourceLocation;
@@ -276,18 +275,9 @@ public final class ExchangeSync {
     }
 
     private static ExchangePayloads.ListingLine listingLine(ServerPlayer viewer, ExchangeData.Listing l, int expiry, long today) {
-        String seller = name(viewer.server, l.owner()).orElse("?");
+        String seller = ExchangeService.name(viewer.server, l.owner()).orElse("?");
         return new ExchangePayloads.ListingLine(l.id(), l.stack().copy(), l.price(), l.quantity(), l.sold(), seller,
                 l.owner().equals(viewer.getUUID()), expiry > 0 ? Math.max(0, l.postedDay() + expiry - today) : -1);
-    }
-
-    /** A player's name: online, or as the server last saw them. */
-    private static Optional<String> name(MinecraftServer server, UUID id) {
-        ServerPlayer online = server.getPlayerList().getPlayer(id);
-        if (online != null) {
-            return Optional.of(online.getGameProfile().getName());
-        }
-        return server.getProfileCache() == null ? Optional.empty() : server.getProfileCache().get(id).map(GameProfile::getName);
     }
 
     /** The exchange as {@code player} sees it. */

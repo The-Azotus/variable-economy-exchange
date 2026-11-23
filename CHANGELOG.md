@@ -4,7 +4,7 @@ What changed in each release of the exchange, for players and server admins. Mod
 
 ## Unreleased
 
-**Install with core 0.6.2 or a later 0.6.x.** The network protocol is unchanged.
+**Install with core 0.6.3 or a later 0.6.x.** The network protocol is unchanged.
 
 - **The exchange is on by default.** On a server whose config file was written by an older version, `enabled` under `[exchange]` still says `false`: set it to `true` to open the exchange.
 - **Fixed: raising the tax while buy orders wait.** The extra tax was taken from the money a buy order held for its later units, so its held money could go below zero and the exchange's stats counted more tax than was paid. A waiting order now pays only the tax it can spare, and always keeps what its remaining units cost.
@@ -15,6 +15,7 @@ What changed in each release of the exchange, for players and server admins. Mod
 - **The Sort button** in Listings stays inside the panel, and no longer covers the total on a narrow window.
 - **The list's scrollbar can be dragged**: click it to jump there, or hold and drag.
 - **Commands:** failures answer in the same sentences as the screen; `/exchange orders` counts orders and listings together against the limit; "1 day", not "1 days".
+- **Posters' and sellers' names show** for players the server's name cache has forgotten (it keeps only the 1,000 seen most recently), using the names core remembers, instead of "?".
 - A poster's name longer than 16 characters (possible behind some proxies) no longer stops an item's book being sent.
 
 ## 0.6.1 (2026-11-17)

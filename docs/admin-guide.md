@@ -16,7 +16,7 @@ For what players see, read the [player guide](player-guide.md). The bank, coins,
 | --- | --- | --- | --- | --- |
 | Exchange | `variable_economy_exchange-<version>.jar` | `variable_economy_exchange` | The player exchange, the Exchange block, `/exchange` | Core |
 
-The exchange needs [Variable Economy core](https://github.com/The-Azotus/variable-economy-core) 0.6.2 or a later 0.6.x, so update them together. Install both on the server and on every client. It works with or without the other add-ons, the market and contracts. It has its own config file in `config/` and its own commands.
+The exchange needs [Variable Economy core](https://github.com/The-Azotus/variable-economy-core) 0.6.3 or a later 0.6.x, so update them together. Install both on the server and on every client. It works with or without the other add-ons, the market and contracts. It has its own config file in `config/` and its own commands.
 
 The exchange is **on by default**: set `exchange.enabled = false` in `config/variable_economy_exchange-server.toml` to turn it off (see [Server config](#server-config)). Before this version it was off by default; a config file written then still says `false`, so set it to `true` there to turn the exchange on.
 
