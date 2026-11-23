@@ -6,7 +6,7 @@ The **Exchange** is an add-on for Variable Economy that lets you trade with othe
 
 Right-click an **Exchange** block to open its screen, or type `/exchange` to open it from anywhere, if your server allows it. If you see *"The exchange is only available at an Exchange on this server"*, find the block instead. Anyone can craft one (see [Crafting the Exchange block](#crafting-the-exchange-block)). If you walk more than about 8 blocks away from the block you opened, its screen closes.
 
-The exchange is off unless the server turns it on. If it's off, the screen says so, and you can still open it to empty your [box](#your-box).
+The exchange is on unless the server turns it off. If it's off, nothing can be posted, bought or filled: the buttons are greyed out with *"The exchange is turned off on this server"* in their tooltips. You can still open it to empty your [box](#your-box).
 
 ## The Exchange
 
@@ -18,7 +18,7 @@ The button in the toolbar switches the list between **Items**, **Listings**, **L
 
 Click an item to see its **book**: each order on it, what sellers ask above the line (cheapest nearest the line), what buyers bid below it (highest nearest), with who posted it and how many units. Your own are marked with a *; hover over one to see how long it has left. The **Price each** box starts at the cheapest ask, or the highest bid if nobody is selling, or blank if the item has no orders. Then set a quantity and press:
 
-- **Buy N for X**: holds X and the tax on it from the account you're using until the order fills. It buys straight away from any seller asking your price or less, cheapest first, and pays *their* price; whatever you saved comes straight back. The rest waits on the book for sellers.
+- **Buy N for X**: X is what posting the order takes from the account you're using: the price of all N, the tax on it and any posting fee. The price and tax are held until the order fills. It buys straight away from any seller asking your price or less, cheapest first, and pays *their* price; whatever you saved comes straight back. The rest waits on the book for sellers.
 - **Sell N for X**: takes N from your main inventory (no enchanted, damaged or renamed copies) and holds them. It sells straight away to any buyer bidding your price or more, highest first, at *their* price. The rest waits on the book for buyers.
 
 On some servers orders don't trade by themselves: they wait until someone picks them. Either way you can **fill another player's order**: click it in the book, and **Buy** becomes *Buy N from Steve* for a sell order (or **Sell** becomes *Sell N to Alex* for a buy order). Set how many and press it; the trade happens at once, at that order's price. Click the order again, or change the price, to post your own order instead.
@@ -27,11 +27,11 @@ The account you're using is your **active account**: your personal account, unle
 
 ### The tax, and where things go
 
-The buyer pays the exchange tax on top of the price (5% by default, rounded up to a whole bit once per order, however many pieces it buys in); the seller gets the whole price. The buttons' tooltips show what you'd pay or get. Some servers also charge a small fee for every order or listing you post, which you don't get back. Items you buy go to your **collection box**. You're paid and your box fills even while you're offline; you get a message when you next log in. Your own orders never trade with each other. You may have up to 10 open orders by default.
+The buyer pays the exchange tax on top of the price (5% by default, rounded up to a whole bit once per order, however many pieces it buys in); the seller gets the whole price. A **Buy** button always shows what you pay, tax included; a **Sell** or **List** button shows what you get. The tooltips break it down. Some servers also charge a small fee for every order or listing you post, which you don't get back. Items you buy go to your **collection box**. You're paid and your box fills even while you're offline; you get a message when you next log in. Your own orders never trade with each other. You may have up to 10 open orders by default.
 
 ### Listings
 
-**Listings** are for items the book can't take: enchanted, damaged, renamed and other one-of-a-kind items (potions, enchanted books, tipped arrows, levelled relics too). Only fresh copies go on the book, exactly as the market sells them. A seller puts up one stack's worth of one exact item at a fixed price each, and buyers take it at that price; nothing is matched or haggled. The list shows each listing's price and how many are left, with a * on your own. Hover over one, or click it, to see the item in full: enchantments, durability, name. Set how many you want and press **Buy N for X**: the money, and the tax on it, is taken now and the items go to your **collection box**, exactly as listed. The **Sort** button in the panel sorts the listings by item, cheapest, dearest, newest or ending soonest, and each listing shows how long it has left.
+**Listings** are for items the book can't take: enchanted, damaged, renamed and other one-of-a-kind items (potions, enchanted books, tipped arrows, levelled relics too). Only fresh copies go on the book, exactly as the market sells them. A seller puts up one stack's worth of one exact item at a fixed price each, and buyers take it at that price; nothing is matched or haggled. The list shows each listing's price and how many are left, with a * on your own. Hover over one, or click it, to see the item in full: enchantments, durability, name. Set how many you want and press **Buy N for X**: X, the price with the tax included, is taken now and the items go to your **collection box**, exactly as listed. The total under the panel is the same amount. The **Sort** button in the panel sorts the listings by item, cheapest, dearest, newest or ending soonest, and each listing shows how long it has left.
 
 **List an item** shows what in your main inventory can be listed. Click one, set a **Price each** and how many (up to one stack; **All** fills in what you have, up to a stack), and press **List N for X**. The items are taken from your inventory and held until bought. Each sale is paid into your bank in full, as with sell orders; buyers pay the tax. Containers such as shulker boxes and bundles can be listed only when empty. Listings count toward your open orders.
 

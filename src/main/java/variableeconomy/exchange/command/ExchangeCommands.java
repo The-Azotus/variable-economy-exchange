@@ -158,13 +158,15 @@ public final class ExchangeCommands {
         ExchangeData data = ExchangeData.get(player.server);
         String unit = "bits";
         List<ExchangeData.Order> orders = ExchangeService.ordersOf(player.getUUID(), data);
-        ctx.getSource().sendSuccess(() -> Component.literal("Exchange (%s): your open orders, %d of %d:".formatted(
-                ExchangeSettings.exchangeEnabled() ? "on" : "off", orders.size(), ExchangeSettings.maxOpenOrders())), false);
+        List<ExchangeData.Listing> listings = ExchangeService.listingsOf(player.getUUID(), data);
+        // Orders and listings share the limit, so the count is of both.
+        int open = orders.size() + listings.size();
+        ctx.getSource().sendSuccess(() -> Component.literal("Exchange (%s): your open orders and listings, %d of %d:".formatted(
+                ExchangeSettings.exchangeEnabled() ? "on" : "off", open, ExchangeSettings.maxOpenOrders())), false);
         for (ExchangeData.Order o : orders) {
             ctx.getSource().sendSuccess(() -> Component.literal("  #%d: %s %d × %s at %d %s each, %d filled".formatted(o.id(),
                     o.buy() ? "buy" : "sell", o.quantity(), o.item(), o.price(), unit, o.filled())), false);
         }
-        List<ExchangeData.Listing> listings = ExchangeService.listingsOf(player.getUUID(), data);
         for (ExchangeData.Listing l : listings) {
             ctx.getSource().sendSuccess(() -> Component.literal("  #%d: listed %d × ".formatted(l.id(), l.quantity()))
                     .append(l.stack().getDisplayName())
@@ -205,14 +207,15 @@ public final class ExchangeCommands {
     }
 
     private static String daysLeft(ExchangeService.BookOrder order) {
-        return order.daysLeft() < 0 ? "" : ", %d day(s) left".formatted(order.daysLeft());
+        return order.daysLeft() < 0 ? "" : order.daysLeft() == 1 ? ", 1 day left" : ", %d days left".formatted(order.daysLeft());
     }
 
     private static int report(CommandContext<CommandSourceStack> ctx, ExchangeService.Outcome outcome) throws CommandSyntaxException {
         ServerPlayer player = ctx.getSource().getPlayerOrException();
         if (!outcome.ok()) {
-            ctx.getSource().sendFailure(Component.literal("Exchange %s failed: %s".formatted(outcome.action().name().toLowerCase(Locale.ROOT),
-                    outcome.result())));
+            // The same sentences the screen shows.
+            ctx.getSource().sendFailure(Component.translatable(
+                    "screen.variable_economy_exchange.result." + outcome.result().name().toLowerCase(Locale.ROOT)));
             return 0;
         }
         String unit = "bits";

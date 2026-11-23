@@ -16,9 +16,9 @@ For what players see, read the [player guide](player-guide.md). The bank, coins,
 | --- | --- | --- | --- | --- |
 | Exchange | `variable_economy_exchange-<version>.jar` | `variable_economy_exchange` | The player exchange, the Exchange block, `/exchange` | Core |
 
-The exchange needs [Variable Economy core](https://github.com/The-Azotus/variable-economy-core) of the same minor version (both 0.6.x, for example), so update them together. Install both on the server and on every client. It works with or without the other add-ons, the market and contracts. It has its own config file in `config/` and its own commands.
+The exchange needs [Variable Economy core](https://github.com/The-Azotus/variable-economy-core) 0.6.2 or a later 0.6.x, so update them together. Install both on the server and on every client. It works with or without the other add-ons, the market and contracts. It has its own config file in `config/` and its own commands.
 
-The exchange is **off by default**: set `exchange.enabled = true` in `config/variable_economy_exchange-server.toml` to turn it on (see [Server config](#server-config)).
+The exchange is **on by default**: set `exchange.enabled = false` in `config/variable_economy_exchange-server.toml` to turn it off (see [Server config](#server-config)). Before this version it was off by default; a config file written then still says `false`, so set it to `true` there to turn the exchange on.
 
 ## The player exchange
 
@@ -86,7 +86,7 @@ The exchange's server config file, `config/variable_economy_exchange-server.toml
 | Option | Default | Range | What it does |
 | --- | --- | --- | --- |
 | `access_mode` | `COMMAND_AND_BLOCK` | `COMMAND_AND_BLOCK`, `BLOCK_ONLY` | How players reach the exchange: by command and block, or by the Exchange block only; see [Letting players in](#letting-players-in). |
-| `exchange.enabled` | false | true, false | Run the [player exchange](#the-player-exchange). Turning it off closes every open order and listing, returning what it holds. The Exchange screen still opens, so players can empty their collection boxes, but nothing can be posted, bought or filled. |
+| `exchange.enabled` | true | true, false | Run the [player exchange](#the-player-exchange). Turning it off closes every open order and listing, returning what it holds. The Exchange screen still opens, so players can empty their collection boxes, but nothing can be posted, bought or filled. |
 | `exchange.max_order_size` | 6400 | 1 – 1,000,000 | Largest quantity one order, or one fill, may ask for. |
 | `tax.buyer_percent` | 5 | 0 – 100 | Percent the buyer pays on top of each purchase, destroyed. Rounded up to a whole bit once per buy order over all it buys, or once per purchase from a listing or fill of a sell order. A buy order holds its tax when posted; the seller gets the whole price. |
 | `posts.max_per_player` | 10 | 1 – 1000 | How many open orders and listings, together, one player may have at once. |
@@ -119,7 +119,7 @@ The exchange's commands sit under `/exchange`.
 
 | You see | Meaning |
 | --- | --- |
-| The Exchange screen says the exchange is turned off | `exchange.enabled` is false, the default. Set it to true. |
+| The Exchange's buttons say the exchange is turned off | `exchange.enabled` is false. Set it to true. A config file written before this version, when off was the default, still says false. |
 | A player sees "The exchange is only available at an Exchange on this server" | `access_mode` is `BLOCK_ONLY`. |
 | A player can't put an item on the book, though they hold it | It has components of its own (enchanted, damaged, renamed, or data another mod adds, such as a relic's level): it goes in a listing instead. |
 | A player can't list a shulker box or bundle | It isn't empty. |

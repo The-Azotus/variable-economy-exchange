@@ -278,7 +278,7 @@ public final class ExchangePayloads {
             ByteBufCodecs.VAR_LONG, ExchangeService.BookOrder::id,
             ByteBufCodecs.VAR_LONG, ExchangeService.BookOrder::price,
             ByteBufCodecs.VAR_INT, ExchangeService.BookOrder::quantity,
-            ByteBufCodecs.stringUtf8(16), ExchangeService.BookOrder::poster,
+            ByteBufCodecs.stringUtf8(ExchangeService.BookOrder.MAX_POSTER_LENGTH), ExchangeService.BookOrder::poster,
             ByteBufCodecs.BOOL, ExchangeService.BookOrder::mine,
             ByteBufCodecs.VAR_LONG, ExchangeService.BookOrder::daysLeft,
             ExchangeService.BookOrder::new);

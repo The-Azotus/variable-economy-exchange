@@ -34,9 +34,9 @@ public final class ExchangeConfig {
                 "expires. Money always goes to the bank account the order was paid from; bought items, and the items of a",
                 "cancelled or expired sell order, wait in the player's collection box.").push("exchange");
         ENABLED = builder
-                .comment("Run the exchange. Turning it off cancels every open order and returns what it held; collection boxes",
-                        "stay open so players can take their items.")
-                .define("enabled", false);
+                .comment("Run the exchange (on by default). Turning it off cancels every open order and returns what it held;",
+                        "collection boxes stay open so players can take their items.")
+                .define("enabled", true);
         MAX_ORDER_SIZE = builder
                 .comment("Largest quantity one order may ask for.")
                 .defineInRange("max_order_size", 6400, 1, 1_000_000);

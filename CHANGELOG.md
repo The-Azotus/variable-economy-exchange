@@ -2,6 +2,21 @@
 
 What changed in each release of the exchange, for players and server admins. Mod and add-on authors: the API's changes are in the [add-on guide's changelog](docs/api.md#changelog). Changes to core, and to Variable Economy as a whole, are in [core's changelog](https://github.com/The-Azotus/variable-economy-core/blob/main/CHANGELOG.md).
 
+## Unreleased
+
+**Install with core 0.6.2 or a later 0.6.x.** The network protocol is unchanged.
+
+- **The exchange is on by default.** On a server whose config file was written by an older version, `enabled` under `[exchange]` still says `false`: set it to `true` to open the exchange.
+- **Fixed: raising the tax while buy orders wait.** The extra tax was taken from the money a buy order held for its later units, so its held money could go below zero and the exchange's stats counted more tax than was paid. A waiting order now pays only the tax it can spare, and always keeps what its remaining units cost.
+- **Fixed: collecting after death.** A request to take items out of the box that reached the server after the player died, with the screen still open, could lose the items. A dead player's requests are now ignored, and `/exchange collect` refuses too.
+- **Every Buy button shows what you pay**: posting a buy order shows the price, the tax and any posting fee; buying from a listing shows the price with the tax, and the panel's total says "tax included".
+- **Sell and List are greyed out** when you can't pay the posting fee, as Buy already was.
+- **All** after picking another player's buy order fills in at most what that order still wants.
+- **The Sort button** in Listings stays inside the panel, and no longer covers the total on a narrow window.
+- **The list's scrollbar can be dragged**: click it to jump there, or hold and drag.
+- **Commands:** failures answer in the same sentences as the screen; `/exchange orders` counts orders and listings together against the limit; "1 day", not "1 days".
+- A poster's name longer than 16 characters (possible behind some proxies) no longer stops an item's book being sent.
+
 ## 0.6.1 (2026-11-17)
 
 - The exchange now lives in its own repository; nothing changes in game.

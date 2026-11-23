@@ -50,7 +50,7 @@ dependencies {
 }
 ```
 
-The exchange is off by default, so turn it on in your dev world (`enabled = true` under `[exchange]` in `config/variable_economy_exchange-server.toml`) to see its events.
+The exchange is on by default; a dev world whose config was written by an older version may still have `enabled = false` under `[exchange]` in `config/variable_economy_exchange-server.toml`.
 
 ### neoforge.mods.toml
 
@@ -104,7 +104,7 @@ The exchange posts its event on `NeoForge.EVENT_BUS` (the game bus). Amounts are
 | --- | --- | --- |
 | `ExchangeTradeEvent` | Two players traded on the player exchange: once per fill of an order (an order that fills against three others posts three, and a player filling one picked order posts one), and once per purchase from a listing. | `getServer`, `getBuyer`, `getSeller` (UUIDs), `getItem` (one unit as an `ItemStack`, a new copy each call; a listing's keeps its components), `getQuantity`, `getUnitPrice`, `getValue` (what the seller was paid), `getTax` (what the buyer paid on top, destroyed), `getBuyerPaid` (value and tax), `isFromListing` |
 
-The exchange is off by default, so its event fires only on servers that turn it on.
+The exchange is on by default; its event fires only on servers where it's on.
 
 - **What it means.** The seller has been paid `getValue()`, or is owed it if the bank couldn't be reached; the buyer paid `getBuyerPaid()`. The bought units are in the buyer's collection box. Either player may be offline.
 - **The price.** `getUnitPrice()` is the waiting order's price for an order fill (the trade happens at the price of the order that was already on the book), or the listing's price.
@@ -132,6 +132,8 @@ These come from core's API, and are described in [core's add-on guide](https://g
 - **Coins.** `CoreApi.isCoin` items are never traded on the exchange.
 
 ## Changelog
+
+- **Unreleased:** requires core 0.6.2 or a later 0.6.x. Nothing in the API changed. The exchange is now on by default.
 
 - **0.6.1 (2026-11-17):** the exchange is its own repository and release; nothing in its API changed.
 
