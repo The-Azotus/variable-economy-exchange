@@ -133,6 +133,8 @@ These come from core's API, and are described in [core's add-on guide](https://g
 
 ## Changelog
 
+- **Unreleased:** nothing in the API changed. Players can now change an order's price; when the changed order trades at once, each fill posts an `ExchangeTradeEvent`, as posting an order does.
+
 - **0.6.2 (2026-11-23):** requires core 0.6.3 or a later 0.6.x. Nothing in the API changed. The exchange is now on by default.
 
 - **0.6.1 (2026-11-17):** the exchange is its own repository and release; nothing in its API changed.

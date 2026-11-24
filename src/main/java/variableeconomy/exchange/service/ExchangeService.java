@@ -11,7 +11,10 @@ import variableeconomy.core.api.PlayerItems;
 import variableeconomy.core.api.Reason;
 import variableeconomy.exchange.api.event.ExchangeTradeEvent;
 import variableeconomy.exchange.data.ExchangeData;
+import variableeconomy.exchange.data.ExchangeData.HistoryEntry;
+import variableeconomy.exchange.data.ExchangeData.HistoryKind;
 import variableeconomy.exchange.data.ExchangeData.Notice;
+import variableeconomy.exchange.data.ExchangeData.Side;
 import variableeconomy.exchange.data.ExchangeData.Listing;
 import variableeconomy.exchange.data.ExchangeData.NoticeKind;
 import variableeconomy.exchange.data.ExchangeData.Order;
@@ -61,7 +64,12 @@ import java.util.function.Predicate;
  *   <li>The buyer pays {@code tax.buyer_percent} on top, destroyed; the seller is paid the whole price into the
  *       account their order belongs to. Bought items go to the buyer's collection box.</li>
  *   <li>Cancelling, expiry or turning the exchange off returns exactly what an order still holds: a buy order's money
- *       to its account, a sell order's items to the collection box.</li>
+ *       to its account, a sell order's items to the collection box. Lowering an order's or listing's quantity returns
+ *       what the units taken off held the same way.</li>
+ *   <li>Changing an order's price moves it to the back of the queue at its new price and matches it again at once; a
+ *       buy order holds what its remaining units need at the new price, paying more or getting the rest back.</li>
+ *   <li>Every trade, and every order or listing completed, cancelled, expired, closed or changed, is kept in its
+ *       players' history ({@code history.max_per_player} lines each).</li>
  *   <li>Only fresh copies go on the book, exactly as the market hands them out. Items with any components of their
  *       own (enchanted, damaged, renamed, a levelled relic and so on, even data the market's sale check ignores)
  *       are <em>listed</em> instead, so they reach the buyer exactly as they were: one stack's worth of one exact item at a fixed price each, which other players buy
@@ -78,7 +86,7 @@ public final class ExchangeService {
     private ExchangeService() {
     }
 
-    public enum Action { POST, CANCEL, COLLECT, LIST, BUY_LISTING, FILL }
+    public enum Action { POST, CANCEL, COLLECT, LIST, BUY_LISTING, FILL, REPRICE, REDUCE }
 
     /**
      * The most bytes one listed item may take to send. Every listing goes to every player browsing them, so an item
@@ -91,10 +99,12 @@ public final class ExchangeService {
      *
      * @param quantity units ordered (posting), listed, bought from a listing, returned (cancelling) or taken out of the
      *                 box (collecting)
-     * @param filled   units that traded straight away when posting
-     * @param amount   posting: money paid for the units bought (tax included) or received for those sold; buying from a
-     *                 listing: what it cost, tax included; cancelling: a buy order's money returned
-     * @param orderId  the order left open on the book after posting (0 if it filled completely), or the listing
+     * @param filled   units that traded straight away when posting or changing a price
+     * @param amount   posting or changing a price: money paid for the units bought then (tax included) or received for
+     *                 those sold; buying from a listing: what it cost, tax included; cancelling or lowering the quantity:
+     *                 a buy order's money returned
+     * @param orderId  the order left open on the book after posting or changing a price (0 if it filled completely), or
+     *                 the listing
      * @param listed   for listing, buying from or cancelling a listing: its item, components and all, so messages can
      *                 name it as listed; empty otherwise
      */
@@ -303,13 +313,23 @@ public final class ExchangeService {
         // one order, which fits a long because that order's whole total and tax did.
         Order order = new Order(data.takeId(), player.getUUID(), Optional.of(account.value()), id, buy, price, qty, 0, 0,
                 buy ? escrow.getAsLong() : 0, day);
-        Fill fill = ExchangeSettings.matchingEnabled() ? match(player.server, data, order, account) : new Fill(order, 0, List.of());
+        Fill fill = place(player.server, data, order, account);
+        return new Outcome(Action.POST, ExchangeResult.OK, id, qty, fill.order().filled(), fill.amount(),
+                fill.order().remaining() > 0 ? order.id() : 0);
+    }
+
+    /**
+     * Puts an order that isn't on the book there: it first trades with whatever it crosses (if matching is on), then
+     * what's left waits. Its money or items are already held; {@code account} is where its own money goes. Posts the
+     * trades' events. Can't fail.
+     */
+    private static Fill place(MinecraftServer server, ExchangeData data, Order order, AccountId account) {
+        Fill fill = ExchangeSettings.matchingEnabled() ? match(server, data, order, account) : new Fill(order, 0, List.of());
         if (fill.order().remaining() > 0) {
             data.add(fill.order());
         }
         ExchangeEvents.postAll(fill.events());
-        return new Outcome(Action.POST, ExchangeResult.OK, id, qty, fill.order().filled(), fill.amount(),
-                fill.order().remaining() > 0 ? order.id() : 0);
+        return fill;
     }
 
     /**
@@ -419,6 +439,16 @@ public final class ExchangeService {
         } else {
             tell(server, data, new Notice(sold.owner(), sold.item(), NoticeKind.SOLD, units, value));
         }
+        ItemStack stack = stack(bought.item());
+        record(data, bought.owner(), HistoryKind.BOUGHT, Side.BUY, bought.id(), stack, units, price, value + tax, tax, Optional.of(sold.owner()));
+        record(data, sold.owner(), HistoryKind.SOLD, Side.SELL, sold.id(), stack, units, price, value, 0, Optional.of(bought.owner()));
+        // An order made up for one fill (filling a picked order) has ID 0 and no history of its own to complete.
+        for (Order order : List.of(bought, sold)) {
+            if (order.id() != 0 && order.remaining() == 0) {
+                record(data, order.owner(), HistoryKind.COMPLETED, order.buy() ? Side.BUY : Side.SELL, order.id(), stack, order.quantity(),
+                        order.price(), order.traded(), 0, Optional.empty());
+            }
+        }
         ExchangeTradeEvent event = new ExchangeTradeEvent(server, bought.owner(), sold.owner(),
                 new ItemStack(BuiltInRegistries.ITEM.get(buyOrder.item())), units, price, value, tax, false);
         return new Trade(bought, sold, value, tax, event);
@@ -427,15 +457,25 @@ public final class ExchangeService {
     // ---- Filling one order -----------------------------------------------------------------------------------
 
     public static Outcome fill(ServerPlayer player, long orderId, int qty) {
-        return fill(player, ExchangeData.get(player.server), orderId, qty, today(player.server));
+        return fill(player, ExchangeData.get(player.server), orderId, qty, OptionalLong.empty(), today(player.server));
+    }
+
+    /** Fills {@code qty} units of an order at {@code price} each, the price the player saw; refused if it's changed. */
+    public static Outcome fill(ServerPlayer player, long orderId, int qty, long price) {
+        return fill(player, ExchangeData.get(player.server), orderId, qty, OptionalLong.of(price), today(player.server));
+    }
+
+    public static Outcome fill(ServerPlayer player, ExchangeData data, long orderId, int qty, long day) {
+        return fill(player, data, orderId, qty, OptionalLong.empty(), day);
     }
 
     /**
      * Fills {@code qty} units of another player's order at its price: buys from a sell order, paying the value and
      * the tax on top from the account the player trades with, the units going to their collection box; or sells into
-     * a buy order from the main inventory, paid from what the order holds. Works with matching on or off.
+     * a buy order from the main inventory, paid from what the order holds. Works with matching on or off. With
+     * {@code price} given, refused with {@code PRICE_CHANGED} unless the order is still at that price.
      */
-    public static Outcome fill(ServerPlayer player, ExchangeData data, long orderId, int qty, long day) {
+    public static Outcome fill(ServerPlayer player, ExchangeData data, long orderId, int qty, OptionalLong price, long day) {
         requireServerThread(player);
         if (!ExchangeSettings.exchangeEnabled()) {
             return Outcome.fail(Action.FILL, ExchangeResult.EXCHANGE_CLOSED, none());
@@ -462,8 +502,11 @@ public final class ExchangeService {
         if (qty > ExchangeSettings.maxOrderSize()) {
             return Outcome.fail(Action.FILL, ExchangeResult.TOO_LARGE, order.item());
         }
+        if (price.isPresent() && price.getAsLong() != order.price()) {
+            return Outcome.fail(Action.FILL, ExchangeResult.PRICE_CHANGED, order.item());
+        }
         double rate = ExchangeSettings.exchangeTax();
-        // The order's whole total fit a long when it was posted, so part of it does too.
+        // The order's whole total fit a long when it was posted (or its price last changed), so part of it does too.
         long value = order.price() * qty;
         AccountId account = CoreApi.accounts().active(player);
         Trade trade;
@@ -619,6 +662,15 @@ public final class ExchangeService {
         tell(player.server, data, new Notice(listing.owner(), listing.item(), NoticeKind.SOLD, qty, value,
                 customName(listing.stack())));
         data.addParcel(player.getUUID(), listing.stack(), qty);
+        record(data, player.getUUID(), HistoryKind.BOUGHT, Side.LISTING, 0, listing.stack(), qty, listing.price(), cost.getAsLong(), tax,
+                Optional.of(listing.owner()));
+        record(data, listing.owner(), HistoryKind.SOLD, Side.LISTING, listing.id(), listing.stack(), qty, listing.price(), value, 0,
+                Optional.of(player.getUUID()));
+        if (qty == listing.remaining()) {
+            // A listing's price can change between sales, so what it came to in all is its sales' sum, not kept here.
+            record(data, listing.owner(), HistoryKind.COMPLETED, Side.LISTING, listing.id(), listing.stack(), listing.quantity(),
+                    listing.price(), 0, 0, Optional.empty());
+        }
         ExchangeEvents.post(new ExchangeTradeEvent(player.server, player.getUUID(), listing.owner(), listing.stack(), qty,
                 listing.price(), value, tax, true));
         return new Outcome(Action.BUY_LISTING, ExchangeResult.OK, listing.item(), qty, qty, cost.getAsLong(), listing.id(), listing.stack());
@@ -645,6 +697,7 @@ public final class ExchangeService {
             }
             data.removeListing(l.id());
             data.addParcel(l.owner(), l.stack(), l.remaining());
+            record(data, l.owner(), HistoryKind.CANCELLED, Side.LISTING, l.id(), l.stack(), l.remaining(), l.price(), 0, 0, Optional.empty());
             return new Outcome(Action.CANCEL, ExchangeResult.OK, l.item(), l.remaining(), 0, 0, l.id(), l.stack());
         }
         Order order = found.get();
@@ -665,7 +718,14 @@ public final class ExchangeService {
         } else {
             data.addToBox(order.owner(), order.item(), order.remaining());
         }
+        recordEnded(data, order, HistoryKind.CANCELLED);
         return new Outcome(Action.CANCEL, ExchangeResult.OK, order.item(), order.remaining(), 0, order.heldMoney(), order.id());
+    }
+
+    /** Records that an order ended without filling: what it still held went back. */
+    private static void recordEnded(ExchangeData data, Order order, HistoryKind kind) {
+        record(data, order.owner(), kind, order.buy() ? Side.BUY : Side.SELL, order.id(), stack(order.item()), order.remaining(),
+                order.price(), order.heldMoney(), 0, Optional.empty());
     }
 
     /**
@@ -673,7 +733,13 @@ public final class ExchangeService {
      * money to its account, or owed if the bank can't be reached; items to the owner's box. The owner is told.
      */
     public static void close(MinecraftServer server, ExchangeData data, Order order) {
+        close(server, data, order, HistoryKind.CLOSED);
+    }
+
+    /** The same, recorded in the owner's history as {@code kind} (expired or closed). */
+    private static void close(MinecraftServer server, ExchangeData data, Order order, HistoryKind kind) {
         data.remove(order.id());
+        recordEnded(data, order, kind);
         if (order.buy()) {
             payBack(server, order.owner(), order.account(), order.heldMoney(), Reason.of(REFUND));
         } else {
@@ -685,7 +751,13 @@ public final class ExchangeService {
 
     /** Closes a listing whoever owns it, returning its units to the owner's box. The owner is told. */
     public static void close(MinecraftServer server, ExchangeData data, Listing listing) {
+        close(server, data, listing, HistoryKind.CLOSED);
+    }
+
+    private static void close(MinecraftServer server, ExchangeData data, Listing listing, HistoryKind kind) {
         data.removeListing(listing.id());
+        record(data, listing.owner(), kind, Side.LISTING, listing.id(), listing.stack(), listing.remaining(), listing.price(), 0, 0,
+                Optional.empty());
         data.addParcel(listing.owner(), listing.stack(), listing.remaining());
         tell(server, data, new Notice(listing.owner(), listing.item(), NoticeKind.LISTING_RETURNED, listing.remaining(), 0,
                 customName(listing.stack())));
@@ -697,9 +769,9 @@ public final class ExchangeService {
             return 0;
         }
         List<Order> due = data.orders().stream().filter(o -> day - o.postedDay() >= expiryDays).toList();
-        due.forEach(order -> close(server, data, order));
+        due.forEach(order -> close(server, data, order, HistoryKind.EXPIRED));
         List<Listing> dueListings = data.listings().stream().filter(l -> day - l.postedDay() >= expiryDays).toList();
-        dueListings.forEach(listing -> close(server, data, listing));
+        dueListings.forEach(listing -> close(server, data, listing, HistoryKind.EXPIRED));
         return due.size() + dueListings.size();
     }
 
@@ -733,6 +805,189 @@ public final class ExchangeService {
     public static void closeAll(MinecraftServer server, ExchangeData data) {
         List.copyOf(data.orders()).forEach(order -> close(server, data, order));
         List.copyOf(data.listings()).forEach(listing -> close(server, data, listing));
+    }
+
+    // ---- Changing an order or listing -------------------------------------------------------------------------
+
+    public static Outcome reprice(ServerPlayer player, long id, long price) {
+        return reprice(player, ExchangeData.get(player.server), id, price);
+    }
+
+    /**
+     * Changes the price of one of the player's open orders or listings. An order moves to the back of the queue at its
+     * new price, keeping its ID, and trades at once with whatever it now crosses (if matching is on). A buy order then
+     * holds what its remaining units need at the new price, and their tax: more is charged to its account, which must be
+     * the one the player trades with now, or the rest is given back. Free: no posting fee. The same price changes nothing.
+     */
+    public static Outcome reprice(ServerPlayer player, ExchangeData data, long id, long price) {
+        requireServerThread(player);
+        if (!ExchangeSettings.exchangeEnabled()) {
+            return Outcome.fail(Action.REPRICE, ExchangeResult.EXCHANGE_CLOSED, none());
+        }
+        Optional<Order> found = data.find(id);
+        if (found.isEmpty()) {
+            return repriceListing(player, data, id, price);
+        }
+        Order order = found.get();
+        if (!order.owner().equals(player.getUUID())) {
+            return Outcome.fail(Action.REPRICE, ExchangeResult.NOT_YOUR_ORDER, order.item());
+        }
+        Optional<Item> item = BuiltInRegistries.ITEM.getOptional(order.item()).filter(ExchangeService::tradeable);
+        // A locked item answers as an unlisted one, as when posting.
+        if (item.isEmpty() || CoreApi.itemGate().isLocked(player, item.get())) {
+            return Outcome.fail(Action.REPRICE, ExchangeResult.NOT_LISTED, order.item());
+        }
+        if (price <= 0) {
+            return Outcome.fail(Action.REPRICE, ExchangeResult.INVALID_PRICE, order.item());
+        }
+        if (price == order.price()) {
+            return new Outcome(Action.REPRICE, ExchangeResult.OK, order.item(), order.remaining(), 0, 0, order.id());
+        }
+        double rate = ExchangeSettings.exchangeTax();
+        OptionalLong total = checkedTotal(price, order.remaining());
+        if (total.isEmpty() || withTax(total.getAsLong(), rate).isEmpty()) {
+            return Outcome.fail(Action.REPRICE, ExchangeResult.TOO_LARGE, order.item());
+        }
+        MinecraftServer server = player.server;
+        // Where the order's money comes from and goes back to.
+        AccountId account = payee(server, order.owner(), order.account(), 0).orElseGet(() -> CoreApi.accounts().personal(order.owner()));
+        long need = 0;
+        long refund = 0;
+        if (order.buy()) {
+            try {
+                // What the remaining units cost at the new price, and the tax on the order's whole spending growing by that.
+                Math.addExact(order.traded(), total.getAsLong());
+                need = Math.addExact(total.getAsLong(), taxOnMore(order.traded(), total.getAsLong(), rate));
+            } catch (ArithmeticException e) {
+                return Outcome.fail(Action.REPRICE, ExchangeResult.TOO_LARGE, order.item());
+            }
+            if (need > order.held()) {
+                if (!account.equals(CoreApi.accounts().active(player))) {
+                    return Outcome.fail(Action.REPRICE, ExchangeResult.WRONG_ACCOUNT, order.item());
+                }
+                // The charge is itself the funds check, and changes nothing unless it succeeds.
+                PaymentResult charged = CoreApi.money().charge(server, account, need - order.held(), Reason.by(ESCROW, player.getUUID()));
+                if (!charged.ok()) {
+                    return Outcome.fail(Action.REPRICE,
+                            charged.result() == BankResult.NO_FUNDS ? ExchangeResult.NO_FUNDS : ExchangeResult.BANK_UNAVAILABLE, order.item());
+                }
+            } else if (need < order.held()) {
+                refund = order.held() - need;
+                Optional<AccountId> to = payee(server, order.owner(), order.account(), refund);
+                if (to.isEmpty()) {
+                    return Outcome.fail(Action.REPRICE, ExchangeResult.BANK_UNAVAILABLE, order.item());
+                }
+                account = to.get();
+            }
+        }
+
+        // Checked (and any extra money taken): nothing below can fail.
+        data.remove(order.id());
+        Order repriced = order.withPrice(price, data.takeId());
+        if (order.buy()) {
+            repriced = repriced.withHeld(need);
+            pay(server, account, refund, Reason.by(REFUND, player.getUUID()));
+        }
+        record(data, order.owner(), HistoryKind.REPRICED, order.buy() ? Side.BUY : Side.SELL, order.id(), stack(order.item()),
+                order.remaining(), price, order.price(), 0, Optional.empty());
+        Fill fill = place(server, data, repriced, account);
+        return new Outcome(Action.REPRICE, ExchangeResult.OK, order.item(), order.remaining(), fill.order().filled() - order.filled(),
+                fill.amount(), fill.order().remaining() > 0 ? order.id() : 0);
+    }
+
+    /** Changes a listing's price. Buyers send the price they saw, so one who saw the old price is refused. */
+    private static Outcome repriceListing(ServerPlayer player, ExchangeData data, long id, long price) {
+        Optional<Listing> found = data.findListing(id);
+        if (found.isEmpty()) {
+            return Outcome.fail(Action.REPRICE, ExchangeResult.ORDER_GONE, none());
+        }
+        Listing listing = found.get();
+        if (!listing.owner().equals(player.getUUID())) {
+            return Outcome.fail(Action.REPRICE, ExchangeResult.NOT_YOUR_ORDER, listing.item());
+        }
+        if (CoreApi.itemGate().isLocked(player, listing.stack().getItem())) {
+            return Outcome.fail(Action.REPRICE, ExchangeResult.NOT_LISTED, listing.item());
+        }
+        if (price <= 0) {
+            return Outcome.fail(Action.REPRICE, ExchangeResult.INVALID_PRICE, listing.item());
+        }
+        OptionalLong total = checkedTotal(price, listing.remaining());
+        if (total.isEmpty() || withTax(total.getAsLong(), ExchangeSettings.exchangeTax()).isEmpty()) {
+            return Outcome.fail(Action.REPRICE, ExchangeResult.TOO_LARGE, listing.item());
+        }
+        if (price != listing.price()) {
+            data.update(listing.withPrice(price));
+            record(data, listing.owner(), HistoryKind.REPRICED, Side.LISTING, listing.id(), listing.stack(), listing.remaining(), price,
+                    listing.price(), 0, Optional.empty());
+        }
+        return new Outcome(Action.REPRICE, ExchangeResult.OK, listing.item(), listing.remaining(), 0, 0, listing.id(), listing.stack());
+    }
+
+    public static Outcome reduce(ServerPlayer player, long id, int remaining) {
+        return reduce(player, ExchangeData.get(player.server), id, remaining);
+    }
+
+    /**
+     * Lowers one of the player's open orders or listings to {@code remaining} units still wanted or offered (at least 1,
+     * and fewer than now; cancel to take off all). It keeps its place in the queue. What the units taken off held goes
+     * back as cancelling returns it: a buy order's money to its account, a sell order's items to the collection box, a
+     * listing's units to the box as they were. Works with the exchange turned off, as cancelling does.
+     */
+    public static Outcome reduce(ServerPlayer player, ExchangeData data, long id, int remaining) {
+        requireServerThread(player);
+        Optional<Order> found = data.find(id);
+        if (found.isEmpty()) {
+            Optional<Listing> listing = data.findListing(id);
+            if (listing.isEmpty()) {
+                return Outcome.fail(Action.REDUCE, ExchangeResult.ORDER_GONE, none());
+            }
+            Listing l = listing.get();
+            if (!l.owner().equals(player.getUUID())) {
+                return Outcome.fail(Action.REDUCE, ExchangeResult.NOT_YOUR_ORDER, l.item());
+            }
+            if (remaining <= 0 || remaining >= l.remaining()) {
+                return Outcome.fail(Action.REDUCE, ExchangeResult.INVALID_QUANTITY, l.item());
+            }
+            int off = l.remaining() - remaining;
+            data.update(l.withRemaining(remaining));
+            data.addParcel(l.owner(), l.stack(), off);
+            record(data, l.owner(), HistoryKind.REDUCED, Side.LISTING, l.id(), l.stack(), off, l.price(), 0, 0, Optional.empty());
+            return new Outcome(Action.REDUCE, ExchangeResult.OK, l.item(), off, 0, 0, l.id(), l.stack());
+        }
+        Order order = found.get();
+        if (!order.owner().equals(player.getUUID())) {
+            return Outcome.fail(Action.REDUCE, ExchangeResult.NOT_YOUR_ORDER, order.item());
+        }
+        if (remaining <= 0 || remaining >= order.remaining()) {
+            return Outcome.fail(Action.REDUCE, ExchangeResult.INVALID_QUANTITY, order.item());
+        }
+        int off = order.remaining() - remaining;
+        Order reduced = order.withRemaining(remaining);
+        long refund = 0;
+        Optional<AccountId> to = Optional.empty();
+        if (order.buy()) {
+            // What it holds beyond what its remaining units need. An order holding less tax than it now owes (the tax was
+            // raised) keeps everything it holds.
+            refund = Math.max(0, order.held() - needed(reduced, ExchangeSettings.exchangeTax()));
+            if (refund > 0) {
+                to = payee(player.server, order.owner(), order.account(), refund);
+                if (to.isEmpty()) {
+                    return Outcome.fail(Action.REDUCE, ExchangeResult.BANK_UNAVAILABLE, order.item());
+                }
+            }
+            reduced = reduced.withHeld(order.held() - refund);
+        }
+
+        data.update(reduced);
+        if (order.buy()) {
+            long paid = refund;
+            to.ifPresent(account -> pay(player.server, account, paid, Reason.by(REFUND, player.getUUID())));
+        } else {
+            data.addToBox(order.owner(), order.item(), off);
+        }
+        record(data, order.owner(), HistoryKind.REDUCED, order.buy() ? Side.BUY : Side.SELL, order.id(), stack(order.item()), off,
+                order.price(), refund, 0, Optional.empty());
+        return new Outcome(Action.REDUCE, ExchangeResult.OK, order.item(), off, 0, refund, order.id());
     }
 
     // ---- The collection box ----------------------------------------------------------------------------------
@@ -808,6 +1063,20 @@ public final class ExchangeService {
         }
         player.getInventory().setChanged();
         return new Outcome(Action.COLLECT, ExchangeResult.OK, shown, (int) Math.min(moved, Integer.MAX_VALUE), 0, 0, 0);
+    }
+
+    // ---- History ---------------------------------------------------------------------------------------------
+
+    /** Adds a line to a player's history, keeping {@code history.max_per_player}. Can't fail. */
+    private static void record(ExchangeData data, UUID player, HistoryKind kind, Side side, long orderId, ItemStack item, long units,
+                               long price, long amount, long tax, Optional<UUID> counterparty) {
+        data.record(player, new HistoryEntry(kind, side, orderId, item, units, price, amount, tax, counterparty, System.currentTimeMillis()),
+                ExchangeSettings.historyPerPlayer());
+    }
+
+    /** One fresh unit of an item by ID; empty if its mod is gone. */
+    private static ItemStack stack(ResourceLocation item) {
+        return BuiltInRegistries.ITEM.getOptional(item).map(ItemStack::new).orElse(ItemStack.EMPTY);
     }
 
     // ---- Paying and telling ----------------------------------------------------------------------------------
@@ -976,6 +1245,14 @@ public final class ExchangeService {
         return data.listings().stream()
                 .filter(l -> !CoreApi.itemGate().isLocked(player, l.stack().getItem()))
                 .sorted(BROWSING_ORDER)
+                .toList();
+    }
+
+    /** Every sell order {@code player} may see, newest first: the Browse tab's plain offers. */
+    public static List<Order> visibleSellOrders(ServerPlayer player, ExchangeData data) {
+        return data.orders().stream()
+                .filter(o -> !o.buy() && !hiddenFrom(player, o.item()))
+                .sorted(Comparator.comparingLong(Order::id).reversed())
                 .toList();
     }
 

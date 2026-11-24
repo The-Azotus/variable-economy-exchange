@@ -1,0 +1,98 @@
+{
+  "values": [
+    {
+      "id": "#minecraft:planks",
+      "required": false
+    },
+    {
+      "id": "#minecraft:logs",
+      "required": false
+    },
+    {
+      "id": "#minecraft:stairs",
+      "required": false
+    },
+    {
+      "id": "#minecraft:slabs",
+      "required": false
+    },
+    {
+      "id": "#minecraft:walls",
+      "required": false
+    },
+    {
+      "id": "#minecraft:wool",
+      "required": false
+    },
+    {
+      "id": "#minecraft:terracotta",
+      "required": false
+    },
+    {
+      "id": "#minecraft:stone_bricks",
+      "required": false
+    },
+    {
+      "id": "#minecraft:fences",
+      "required": false
+    },
+    {
+      "id": "#minecraft:fence_gates",
+      "required": false
+    },
+    {
+      "id": "#minecraft:doors",
+      "required": false
+    },
+    {
+      "id": "#minecraft:trapdoors",
+      "required": false
+    },
+    {
+      "id": "#c:stones",
+      "required": false
+    },
+    {
+      "id": "#c:cobblestones",
+      "required": false
+    },
+    {
+      "id": "#c:glass_blocks",
+      "required": false
+    },
+    {
+      "id": "#c:glass_panes",
+      "required": false
+    },
+    {
+      "id": "#c:sandstone_blocks",
+      "required": false
+    },
+    {
+      "id": "#c:concretes",
+      "required": false
+    },
+    {
+      "id": "#c:glazed_terracottas",
+      "required": false
+    },
+    {
+      "id": "#c:bricks",
+      "required": false
+    },
+    "minecraft:bricks",
+    "minecraft:sand",
+    "minecraft:red_sand",
+    "minecraft:gravel",
+    "minecraft:dirt",
+    "minecraft:clay",
+    "minecraft:quartz_block",
+    "minecraft:prismarine",
+    "minecraft:deepslate",
+    "minecraft:tuff",
+    "minecraft:calcite",
+    "minecraft:blackstone",
+    "minecraft:basalt",
+    "minecraft:obsidian"
+  ]
+}

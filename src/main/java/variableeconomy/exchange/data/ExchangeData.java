@@ -22,8 +22,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * The player exchange, saved with the world: open orders and listings, each player's collection box,
- * or still to be told. All of it is one saved file, so a restart never splits a trade between them. Only
+ * The player exchange, saved with the world: open orders and listings, each player's collection box, what they're
+ * still to be told, and each player's history. All of it is one saved file, so a restart never splits a trade between them. Only
  * {@code ExchangeService} changes it. Server thread only.
  * <p>
  * What an order holds: a buy order holds {@code price × remaining} in money, taken when it was posted; a sell order
@@ -34,8 +34,8 @@ public final class ExchangeData extends SavedData {
     public static final String ID = "variable_economy_exchange";
     private static final SavedData.Factory<ExchangeData> FACTORY = new SavedData.Factory<>(ExchangeData::new, ExchangeData::fromTag, null);
     /** Best price first, then oldest first: the order in which a side of the book fills. */
-    private static final Comparator<Order> ASKS = Comparator.comparingLong(Order::price).thenComparingLong(Order::id);
-    private static final Comparator<Order> BIDS = Comparator.comparingLong(Order::price).reversed().thenComparingLong(Order::id);
+    private static final Comparator<Order> ASKS = Comparator.comparingLong(Order::price).thenComparingLong(Order::seq);
+    private static final Comparator<Order> BIDS = Comparator.comparingLong(Order::price).reversed().thenComparingLong(Order::seq);
 
     /**
      * One open order.
@@ -50,9 +50,17 @@ public final class ExchangeData extends SavedData {
      * @param held      a buy order's money still held: enough for its remaining units at its price and their tax; 0
      *                  for a sell order
      * @param postedDay the exchange's day count when it was posted, for expiry
+     * @param seq       its place in the queue at its price: its ID when posted, a new number (from the same count) when
+     *                  its price changes, so a changed order waits behind those already at its new price
      */
     public record Order(long id, UUID owner, Optional<UUID> account, ResourceLocation item, boolean buy, long price, int quantity,
-                        int filled, long traded, long held, long postedDay) {
+                        int filled, long traded, long held, long postedDay, long seq) {
+        /** A new order, whose place in the queue is its ID. */
+        public Order(long id, UUID owner, Optional<UUID> account, ResourceLocation item, boolean buy, long price, int quantity,
+                     int filled, long traded, long held, long postedDay) {
+            this(id, owner, account, item, buy, price, quantity, filled, traded, held, postedDay, id);
+        }
+
         public int remaining() {
             return quantity - filled;
         }
@@ -64,12 +72,23 @@ public final class ExchangeData extends SavedData {
 
         /** After {@code units} more traded for {@code value} in all, and {@code taken} more (value and tax) paid out of what it holds. */
         public Order withFill(int units, long value, long taken) {
-            return new Order(id, owner, account, item, buy, price, quantity, filled + units, traded + value, buy ? held - taken : 0, postedDay);
+            return new Order(id, owner, account, item, buy, price, quantity, filled + units, traded + value, buy ? held - taken : 0, postedDay,
+                    seq);
         }
 
         /** The same order holding {@code money}. */
         public Order withHeld(long money) {
-            return new Order(id, owner, account, item, buy, price, quantity, filled, traded, money, postedDay);
+            return new Order(id, owner, account, item, buy, price, quantity, filled, traded, money, postedDay, seq);
+        }
+
+        /** The same order at {@code newPrice} each, at the back of the queue at that price ({@code newSeq}). */
+        public Order withPrice(long newPrice, long newSeq) {
+            return new Order(id, owner, account, item, buy, newPrice, quantity, filled, traded, held, postedDay, newSeq);
+        }
+
+        /** The same order wanting {@code newRemaining} more units instead of its remaining ones. */
+        public Order withRemaining(int newRemaining) {
+            return new Order(id, owner, account, item, buy, price, filled + newRemaining, filled, traded, held, postedDay, seq);
         }
     }
 
@@ -93,6 +112,15 @@ public final class ExchangeData extends SavedData {
 
         public Listing withSold(int total) {
             return new Listing(id, owner, account, stack, price, quantity, total, postedDay);
+        }
+
+        public Listing withPrice(long newPrice) {
+            return new Listing(id, owner, account, stack, newPrice, quantity, sold, postedDay);
+        }
+
+        /** The same listing offering {@code newRemaining} more units instead of its remaining ones. */
+        public Listing withRemaining(int newRemaining) {
+            return new Listing(id, owner, account, stack, price, sold + newRemaining, sold, postedDay);
         }
     }
 
@@ -121,6 +149,43 @@ public final class ExchangeData extends SavedData {
         }
     }
 
+    /** What a line of a player's history records. */
+    public enum HistoryKind {
+        /** Bought units: {@code amount} is what they cost, tax included, {@code tax} the tax in it. */
+        BOUGHT,
+        /** Sold units: {@code amount} is what the seller was paid (the whole price). */
+        SOLD,
+        /** An order filled or a listing sold out: {@code units} its quantity, {@code amount} what it traded for before tax. */
+        COMPLETED,
+        /** Cancelled by its owner: {@code units} went back to the box, or {@code amount} of a buy order's money back to its account. */
+        CANCELLED,
+        /** Expired: as {@link #CANCELLED}. */
+        EXPIRED,
+        /** Closed by an admin or by the exchange being turned off: as {@link #CANCELLED}. */
+        CLOSED,
+        /** Its price changed to {@code price}; {@code amount} is the old price, {@code units} the units it still wants. */
+        REPRICED,
+        /** Its quantity was lowered by {@code units}; {@code amount} is a buy order's money returned. */
+        REDUCED
+    }
+
+    /** Which kind of post a history line is about. */
+    public enum Side { BUY, SELL, LISTING }
+
+    /**
+     * One line of a player's exchange history.
+     *
+     * @param orderId      the player's own order or listing it's about, or 0 for a purchase or sale without one (buying
+     *                     from a listing, or filling another player's order)
+     * @param item         one unit of the item, exactly as traded
+     * @param price        per unit, in bits
+     * @param counterparty the other player of a trade
+     * @param time         when, in milliseconds since the epoch, by the server's clock
+     */
+    public record HistoryEntry(HistoryKind kind, Side side, long orderId, ItemStack item, long units, long price, long amount, long tax,
+                               Optional<UUID> counterparty, long time) {
+    }
+
     private final List<Order> orders = new ArrayList<>();
     private final List<Listing> listings = new ArrayList<>();
     /** Items waiting for each player, by item, in the order they arrived. */
@@ -133,6 +198,8 @@ public final class ExchangeData extends SavedData {
      */
     private final ListTag unreadable = new ListTag();
     private final List<Notice> notices = new ArrayList<>();
+    /** Each player's history, oldest first. */
+    private final Map<UUID, List<HistoryEntry>> history = new LinkedHashMap<>();
     private long nextId = 1;
     private long taxCollected;
     private long volume;
@@ -157,7 +224,7 @@ public final class ExchangeData extends SavedData {
         return orders.stream().filter(o -> o.id() == id).findFirst();
     }
 
-    /** Takes the next order ID. IDs never repeat, so they also give time priority. */
+    /** Takes the next ID. IDs never repeat; an order's first one is also its place in the queue ({@link Order#seq}). */
     public long takeId() {
         setDirty();
         return nextId++;
@@ -407,6 +474,27 @@ public final class ExchangeData extends SavedData {
         return theirs;
     }
 
+    // ---- History -----------------------------------------------------------------------------------------------
+
+    /** Adds a line to the player's history, dropping their oldest beyond {@code keep}. Can't fail. */
+    public void record(UUID player, HistoryEntry entry, int keep) {
+        if (keep <= 0 || entry.item().isEmpty()) {
+            return;
+        }
+        List<HistoryEntry> theirs = history.computeIfAbsent(player, p -> new ArrayList<>());
+        theirs.add(new HistoryEntry(entry.kind(), entry.side(), entry.orderId(), entry.item().copyWithCount(1), entry.units(), entry.price(),
+                entry.amount(), entry.tax(), entry.counterparty(), entry.time()));
+        if (theirs.size() > keep) {
+            theirs.subList(0, theirs.size() - keep).clear();
+        }
+        setDirty();
+    }
+
+    /** The player's history, oldest first. */
+    public List<HistoryEntry> history(UUID player) {
+        return Collections.unmodifiableList(history.getOrDefault(player, List.of()));
+    }
+
     // ---- Money counts ----------------------------------------------------------------------------------------
 
     /** Adds one trade to the counts: its value, and the tax taken from it (money destroyed). */
@@ -433,6 +521,9 @@ public final class ExchangeData extends SavedData {
         data.nextId = Math.max(1, tag.getLong("next_id"));
         data.taxCollected = tag.getLong("tax_collected");
         data.volume = tag.getLong("volume");
+        for (Tag element : tag.getList("history", Tag.TAG_COMPOUND)) {
+            readHistory(data, (CompoundTag) element, registries);
+        }
         for (Tag element : tag.getList("orders", Tag.TAG_COMPOUND)) {
             CompoundTag o = (CompoundTag) element;
             ResourceLocation item = ResourceLocation.tryParse(o.getString("item"));
@@ -446,8 +537,10 @@ public final class ExchangeData extends SavedData {
                 long traded = o.contains("traded") ? o.getLong("traded")
                         : !buy && o.contains("sold_value") ? o.getLong("sold_value") : price * filled;
                 long held = o.contains("held") ? o.getLong("held") : buy ? price * (quantity - filled) : 0;
+                // Before version 3 an order's ID was its place in the queue.
+                long seq = o.contains("seq") ? o.getLong("seq") : o.getLong("id");
                 data.orders.add(new Order(o.getLong("id"), o.getUUID("owner"), account(o), item, buy, price, quantity, filled, traded, held,
-                        o.getLong("posted_day")));
+                        o.getLong("posted_day"), seq));
             }
         }
         for (Tag element : tag.getList("listings", Tag.TAG_COMPOUND)) {
@@ -513,6 +606,26 @@ public final class ExchangeData extends SavedData {
                 .add(new Parcel(p.getLong("id"), stack.get().copyWithCount(1), p.getLong("count")));
     }
 
+    /** A history line; one whose item can't be read now (its mod was removed) is dropped, as it's only a record. */
+    private static void readHistory(ExchangeData data, CompoundTag h, HolderLookup.Provider registries) {
+        ItemStack item = ItemStack.parseOptional(registries, h.getCompound("item"));
+        if (item.isEmpty() || !h.hasUUID("player")) {
+            return;
+        }
+        HistoryKind kind;
+        Side side;
+        try {
+            kind = HistoryKind.valueOf(h.getString("kind").toUpperCase(Locale.ROOT));
+            side = Side.valueOf(h.getString("side").toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            return;
+        }
+        Optional<UUID> counterparty = h.hasUUID("counterparty") ? Optional.of(h.getUUID("counterparty")) : Optional.empty();
+        data.history.computeIfAbsent(h.getUUID("player"), p -> new ArrayList<>()).add(new HistoryEntry(kind, side, h.getLong("order"),
+                item.copyWithCount(1), h.getLong("units"), h.getLong("price"), h.getLong("amount"), h.getLong("tax"), counterparty,
+                h.getLong("time")));
+    }
+
     private static void keepUnreadable(ExchangeData data, CompoundTag tag, String kind) {
         CompoundTag kept = tag.copy();
         kept.putString("kind", kind);
@@ -522,7 +635,7 @@ public final class ExchangeData extends SavedData {
 
     @Override
     public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
-        tag.putInt("version", 2);
+        tag.putInt("version", 3);
         tag.putLong("day", day);
         tag.putLong("world_day", lastWorldDay);
         tag.putLong("next_id", nextId);
@@ -542,6 +655,7 @@ public final class ExchangeData extends SavedData {
             o.putLong("traded", order.traded());
             o.putLong("held", order.held());
             o.putLong("posted_day", order.postedDay());
+            o.putLong("seq", order.seq());
             orderList.add(o);
         }
         tag.put("orders", orderList);
@@ -593,6 +707,23 @@ public final class ExchangeData extends SavedData {
             noticeList.add(n);
         }
         tag.put("notices", noticeList);
+        ListTag historyList = new ListTag();
+        history.forEach((player, theirs) -> theirs.forEach(entry -> {
+            CompoundTag h = new CompoundTag();
+            h.putUUID("player", player);
+            h.putString("kind", entry.kind().name().toLowerCase(Locale.ROOT));
+            h.putString("side", entry.side().name().toLowerCase(Locale.ROOT));
+            h.putLong("order", entry.orderId());
+            h.put("item", entry.item().save(registries));
+            h.putLong("units", entry.units());
+            h.putLong("price", entry.price());
+            h.putLong("amount", entry.amount());
+            h.putLong("tax", entry.tax());
+            entry.counterparty().ifPresent(id -> h.putUUID("counterparty", id));
+            h.putLong("time", entry.time());
+            historyList.add(h);
+        }));
+        tag.put("history", historyList);
         return tag;
     }
 }

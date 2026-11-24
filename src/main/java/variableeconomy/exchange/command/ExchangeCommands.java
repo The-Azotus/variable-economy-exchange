@@ -31,7 +31,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * {@code /exchange [orders|book|buy|sell|list|listings|buylisting|cancel|collect]}: the exchange screen as commands, for
+ * {@code /exchange [orders|book|buy|sell|list|listings|fill|buylisting|cancel|reprice|reduce|history|collect]}: the exchange
+ * screen as commands, for
  * scripting and testing without the screen. {@code /exchange admin [cancel <id>]} shows the whole exchange and
  * its money counts, or closes any order or listing, returning what it holds.
  */
@@ -89,6 +90,21 @@ public final class ExchangeCommands {
                         .then(Commands.argument("id", LongArgumentType.longArg(1))
                                 .executes(ctx -> report(ctx, ExchangeService.cancel(ctx.getSource().getPlayerOrException(),
                                         LongArgumentType.getLong(ctx, "id"))))))
+                .then(Commands.literal("reprice")
+                        .requires(ExchangeSettings::commandsAllowed)
+                        .then(Commands.argument("id", LongArgumentType.longArg(1))
+                                .then(Commands.argument("price", LongArgumentType.longArg(1))
+                                        .executes(ctx -> report(ctx, ExchangeService.reprice(ctx.getSource().getPlayerOrException(),
+                                                LongArgumentType.getLong(ctx, "id"), LongArgumentType.getLong(ctx, "price")))))))
+                .then(Commands.literal("reduce")
+                        .requires(ExchangeSettings::commandsAllowed)
+                        .then(Commands.argument("id", LongArgumentType.longArg(1))
+                                .then(Commands.argument("qty", IntegerArgumentType.integer(1))
+                                        .executes(ctx -> report(ctx, ExchangeService.reduce(ctx.getSource().getPlayerOrException(),
+                                                LongArgumentType.getLong(ctx, "id"), IntegerArgumentType.getInteger(ctx, "qty")))))))
+                .then(Commands.literal("history")
+                        .requires(ExchangeSettings::commandsAllowed)
+                        .executes(ExchangeCommands::history))
                 .then(Commands.literal("collect")
                         .requires(ExchangeSettings::commandsAllowed)
                         .executes(ctx -> report(ctx, ExchangeService.collect(ctx.getSource().getPlayerOrException(), Optional.empty())))
@@ -235,6 +251,15 @@ public final class ExchangeCommands {
                     item, outcome.orderId(), outcome.amount(), unit);
             case FILL -> "Filled %d of order #%d for %s: %d %s".formatted(outcome.quantity(), outcome.orderId(), outcome.item(),
                     outcome.amount(), unit);
+            case REPRICE -> !outcome.listed().isEmpty()
+                    ? "Listing #%d's price changed".formatted(outcome.orderId())
+                    : "Order for %s repriced: %d filled now (%d %s)%s".formatted(outcome.item(), outcome.filled(), outcome.amount(), unit,
+                    outcome.orderId() > 0 ? "; order #" + outcome.orderId() + " waits for the rest" : "; nothing left to wait");
+            case REDUCE -> !outcome.listed().isEmpty()
+                    ? "Listing #%d lowered by %d; they went to your collection box".formatted(outcome.orderId(), outcome.quantity())
+                    : outcome.amount() > 0
+                    ? "Order #%d lowered by %d; %d %s returned".formatted(outcome.orderId(), outcome.quantity(), outcome.amount(), unit)
+                    : "Order #%d lowered by %d; they went to your collection box".formatted(outcome.orderId(), outcome.quantity());
         };
         ctx.getSource().sendSuccess(() -> Component.literal(message), false);
         if (outcome.action() != ExchangeService.Action.COLLECT) {
@@ -242,6 +267,22 @@ public final class ExchangeCommands {
         }
         ExchangeSync.sendState(player);
         return 1;
+    }
+
+    /** The player's exchange history, newest first. */
+    private static int history(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        List<ExchangeData.HistoryEntry> entries = ExchangeData.get(player.server).history(player.getUUID());
+        ctx.getSource().sendSuccess(() -> Component.literal("Exchange history: %d line(s), newest first".formatted(entries.size())), false);
+        for (ExchangeData.HistoryEntry e : entries.reversed()) {
+            String who = e.counterparty().map(id -> " with " + name(player.server, id)).orElse("");
+            String order = e.orderId() > 0 ? " #" + e.orderId() : "";
+            ctx.getSource().sendSuccess(() -> Component.literal("  %s %s%s: %d × ".formatted(e.kind().name().toLowerCase(Locale.ROOT),
+                            e.side().name().toLowerCase(Locale.ROOT), order, e.units()))
+                    .append(e.item().getHoverName())
+                    .append(" at %d bits, %d bits%s".formatted(e.price(), e.amount(), who)), false);
+        }
+        return entries.size();
     }
 
     private static int adminInfo(CommandContext<CommandSourceStack> ctx) {

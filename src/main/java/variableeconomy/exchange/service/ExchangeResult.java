@@ -31,5 +31,10 @@ public enum ExchangeResult {
     /** Buying from one's own listing. */
     OWN_LISTING,
     /** Filling one's own order. */
-    OWN_ORDER
+    OWN_ORDER,
+    /**
+     * Raising the price of a buy order paid from an account other than the one the player trades with now: more money
+     * would have to come from that account.
+     */
+    WRONG_ACCOUNT
 }

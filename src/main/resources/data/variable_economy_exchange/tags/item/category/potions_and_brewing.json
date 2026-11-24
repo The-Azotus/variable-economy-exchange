@@ -1,0 +1,28 @@
+{
+  "values": [
+    {
+      "id": "#c:potions",
+      "required": false
+    },
+    "minecraft:potion",
+    "minecraft:splash_potion",
+    "minecraft:lingering_potion",
+    "minecraft:tipped_arrow",
+    "minecraft:brewing_stand",
+    "minecraft:cauldron",
+    "minecraft:glass_bottle",
+    "minecraft:nether_wart",
+    "minecraft:blaze_powder",
+    "minecraft:fermented_spider_eye",
+    "minecraft:glistering_melon_slice",
+    "minecraft:golden_carrot",
+    "minecraft:magma_cream",
+    "minecraft:ghast_tear",
+    "minecraft:rabbit_foot",
+    "minecraft:phantom_membrane",
+    "minecraft:dragon_breath",
+    "minecraft:experience_bottle",
+    "minecraft:pufferfish",
+    "minecraft:turtle_helmet"
+  ]
+}

@@ -4,7 +4,11 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.world.entity.player.Player;
 
+import net.minecraft.resources.ResourceLocation;
+
+import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * The exchange's server settings. They come from {@code config/variable_economy_exchange-server.toml},
@@ -69,7 +73,31 @@ public final class ExchangeSettings {
          * @return the value
          */
         int maxOrderSize();
+
+        /**
+         * How many lines of history are kept for each player (history.max_per_player).
+         *
+         * @return the value
+         */
+        int historyPerPlayer();
+
+        /**
+         * The Browse tab's categories, in order (browse.categories).
+         *
+         * @return the value
+         */
+        List<String> categories();
+
+        /**
+         * {@code category=creative_tab_id} entries for items in no category tag (browse.creative_tab_fallback).
+         *
+         * @return the value
+         */
+        List<String> creativeTabFallback();
     }
+
+    /** The category that holds every item in no other category. */
+    public static final String MISCELLANEOUS = "miscellaneous";
 
     private static volatile Source source;
 
@@ -127,6 +155,33 @@ public final class ExchangeSettings {
     /** The largest quantity one order may ask for (exchange.max_order_size). */
     public static int maxOrderSize() {
         return source().maxOrderSize();
+    }
+
+    /** How many lines of history are kept for each player (history.max_per_player). */
+    public static int historyPerPlayer() {
+        return source().historyPerPlayer();
+    }
+
+    /** The Browse tab's categories, in order (browse.categories). */
+    public static List<String> categories() {
+        return source().categories();
+    }
+
+    /** {@code category=creative_tab_id} entries for items in no category tag (browse.creative_tab_fallback). */
+    public static List<String> creativeTabFallback() {
+        return source().creativeTabFallback();
+    }
+
+    /**
+     * The item tag a category stands for: a plain name is {@code variable_economy_exchange:category/<name>}, a full ID is
+     * itself; empty for an entry that isn't a valid ID. {@link #MISCELLANEOUS} also holds every item in no other category.
+     */
+    public static Optional<ResourceLocation> categoryTag(String category) {
+        if (category.isBlank()) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(category.contains(":") ? ResourceLocation.tryParse(category)
+                : ResourceLocation.tryBuild(ExchangeModule.MOD_ID, "category/" + category));
     }
 
     /** Whether {@code source} may use the exchange's commands: always for operators and the console, otherwise unless block-only. */

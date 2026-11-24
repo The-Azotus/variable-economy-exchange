@@ -1,0 +1,47 @@
+{
+  "values": [
+    {
+      "id": "#c:foods",
+      "required": false
+    },
+    {
+      "id": "#c:crops",
+      "required": false
+    },
+    {
+      "id": "#c:seeds",
+      "required": false
+    },
+    {
+      "id": "#minecraft:saplings",
+      "required": false
+    },
+    {
+      "id": "#minecraft:flowers",
+      "required": false
+    },
+    {
+      "id": "#minecraft:leaves",
+      "required": false
+    },
+    {
+      "id": "#c:mushrooms",
+      "required": false
+    },
+    "minecraft:bone_meal",
+    "minecraft:hay_block",
+    "minecraft:egg",
+    "minecraft:sugar",
+    "minecraft:sugar_cane",
+    "minecraft:cocoa_beans",
+    "minecraft:pumpkin",
+    "minecraft:melon",
+    "minecraft:cactus",
+    "minecraft:bamboo",
+    "minecraft:composter",
+    "minecraft:wheat",
+    "minecraft:milk_bucket",
+    "minecraft:honey_bottle",
+    "minecraft:honeycomb"
+  ]
+}

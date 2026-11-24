@@ -1,0 +1,66 @@
+{
+  "values": [
+    {
+      "id": "#minecraft:pickaxes",
+      "required": false
+    },
+    {
+      "id": "#minecraft:axes",
+      "required": false
+    },
+    {
+      "id": "#minecraft:shovels",
+      "required": false
+    },
+    {
+      "id": "#minecraft:hoes",
+      "required": false
+    },
+    {
+      "id": "#c:tools/fishing_rod",
+      "required": false
+    },
+    {
+      "id": "#c:tools/shear",
+      "required": false
+    },
+    {
+      "id": "#c:tools/brush",
+      "required": false
+    },
+    {
+      "id": "#c:tools/igniter",
+      "required": false
+    },
+    {
+      "id": "#c:tools/mining_tool",
+      "required": false
+    },
+    {
+      "id": "#c:buckets",
+      "required": false
+    },
+    "minecraft:compass",
+    "minecraft:recovery_compass",
+    "minecraft:clock",
+    "minecraft:spyglass",
+    "minecraft:lead",
+    "minecraft:name_tag",
+    "minecraft:saddle",
+    "minecraft:bucket",
+    "minecraft:elytra",
+    "minecraft:fishing_rod",
+    "minecraft:shears",
+    "minecraft:flint_and_steel",
+    "minecraft:brush",
+    "minecraft:map",
+    "minecraft:ender_chest",
+    "minecraft:shulker_box",
+    "minecraft:chest",
+    "minecraft:barrel",
+    "minecraft:crafting_table",
+    "minecraft:furnace",
+    "minecraft:torch",
+    "minecraft:lantern"
+  ]
+}

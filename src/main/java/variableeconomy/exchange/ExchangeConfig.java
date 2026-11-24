@@ -1,6 +1,9 @@
 package variableeconomy.exchange;
 
+import net.minecraft.resources.ResourceLocation;
 import net.neoforged.neoforge.common.ModConfigSpec;
+
+import java.util.List;
 
 /**
  * The exchange's server config, {@code config/variable_economy_exchange-server.toml}, loaded when a server starts.
@@ -18,6 +21,19 @@ public final class ExchangeConfig {
     public static final ModConfigSpec.IntValue DURATION_DAYS;
     public static final ModConfigSpec.LongValue LISTING_FEE;
     public static final ModConfigSpec.BooleanValue MATCHING_ENABLED;
+    public static final ModConfigSpec.IntValue HISTORY_PER_PLAYER;
+    public static final ModConfigSpec.ConfigValue<List<? extends String>> CATEGORIES;
+    public static final ModConfigSpec.ConfigValue<List<? extends String>> CREATIVE_TAB_FALLBACK;
+
+    /** The categories the screen offers by default, in order; each but the last is an item tag of the mod's. */
+    public static final List<String> DEFAULT_CATEGORIES = List.of("building_blocks", "ores_and_minerals", "farming_and_food",
+            "weapons_and_armor", "tools_and_equipment", "mob_drops", "redstone_and_technology", "potions_and_brewing",
+            ExchangeSettings.MISCELLANEOUS);
+    /** Which category an item in no category tag gets from the creative tab it's in, by default. */
+    public static final List<String> DEFAULT_CREATIVE_TAB_FALLBACK = List.of("building_blocks=minecraft:building_blocks",
+            "building_blocks=minecraft:colored_blocks", "building_blocks=minecraft:natural_blocks",
+            "farming_and_food=minecraft:food_and_drinks", "weapons_and_armor=minecraft:combat",
+            "tools_and_equipment=minecraft:tools_and_utilities", "redstone_and_technology=minecraft:redstone_blocks");
 
     static {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
@@ -72,6 +88,29 @@ public final class ExchangeConfig {
                         "Players can fill a chosen order either way.")
                 .define("enabled", true);
         builder.pop();
+
+        builder.push("history");
+        HISTORY_PER_PLAYER = builder
+                .comment("How many lines of history (trades, and orders completed, cancelled, expired or changed) the exchange keeps",
+                        "for each player, shown on the screen's My Orders and Collection tabs. The oldest go first. 0 keeps none.")
+                .defineInRange("max_per_player", 100, 0, 1000);
+        builder.pop();
+
+        builder.push("browse");
+        CATEGORIES = builder
+                .comment("The categories the exchange screen's Browse tab offers, in order. Each is an item tag: a plain name like",
+                        "\"building_blocks\" is the tag variable_economy_exchange:category/building_blocks (the mod ships these, and a",
+                        "datapack can change them), and a full ID like \"c:ores\" is that tag. An item may be in several.",
+                        "\"" + ExchangeSettings.MISCELLANEOUS + "\" is every item in no other category.",
+                        "On screen a plain name is called by the translation screen.variable_economy_exchange.category.<name>, and",
+                        "a full ID by tag.item.<namespace>.<path, with / as .>, as mods name their tags; or else by its last word.")
+                .defineListAllowEmpty("categories", DEFAULT_CATEGORIES, () -> "", ExchangeConfig::validCategory);
+        CREATIVE_TAB_FALLBACK = builder
+                .comment("For an item in none of the category tags: the category it gets from a creative tab it's on, as",
+                        "\"category=creative_tab_id\" (the category as written above). Lets modded items whose mods use no common",
+                        "tags still be sorted; add a mod's own tabs here, such as \"tools_and_equipment=examplemod:tools\".")
+                .defineListAllowEmpty("creative_tab_fallback", DEFAULT_CREATIVE_TAB_FALLBACK, () -> "", ExchangeConfig::validFallback);
+        builder.pop();
         SPEC = builder.build();
     }
 
@@ -120,7 +159,36 @@ public final class ExchangeConfig {
             public int maxOrderSize() {
                 return value(MAX_ORDER_SIZE);
             }
+
+            @Override
+            public int historyPerPlayer() {
+                return value(HISTORY_PER_PLAYER);
+            }
+
+            @Override
+            public List<String> categories() {
+                return List.copyOf(value(CATEGORIES));
+            }
+
+            @Override
+            public List<String> creativeTabFallback() {
+                return List.copyOf(value(CREATIVE_TAB_FALLBACK));
+            }
         });
+    }
+
+    /** A category: a plain name or a full ID, which must make a valid tag ID. */
+    static boolean validCategory(Object entry) {
+        return entry instanceof String s && ExchangeSettings.categoryTag(s).isPresent();
+    }
+
+    /** {@code category=creative_tab_id}. */
+    static boolean validFallback(Object entry) {
+        if (!(entry instanceof String s)) {
+            return false;
+        }
+        int eq = s.indexOf('=');
+        return eq > 0 && validCategory(s.substring(0, eq).trim()) && ResourceLocation.tryParse(s.substring(eq + 1).trim()) != null;
     }
 
     /** Whether players reach the exchange by command and block, or by block only. */
