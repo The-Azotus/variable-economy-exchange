@@ -1,0 +1,63 @@
+{
+  "values": [
+    {
+      "id": "#minecraft:swords",
+      "required": false
+    },
+    {
+      "id": "#c:tools/melee_weapon",
+      "required": false
+    },
+    {
+      "id": "#c:tools/ranged_weapon",
+      "required": false
+    },
+    {
+      "id": "#c:tools/bow",
+      "required": false
+    },
+    {
+      "id": "#c:tools/crossbow",
+      "required": false
+    },
+    {
+      "id": "#c:tools/spear",
+      "required": false
+    },
+    {
+      "id": "#c:tools/shield",
+      "required": false
+    },
+    {
+      "id": "#c:armors",
+      "required": false
+    },
+    {
+      "id": "#minecraft:head_armor",
+      "required": false
+    },
+    {
+      "id": "#minecraft:chest_armor",
+      "required": false
+    },
+    {
+      "id": "#minecraft:leg_armor",
+      "required": false
+    },
+    {
+      "id": "#minecraft:foot_armor",
+      "required": false
+    },
+    {
+      "id": "#minecraft:arrows",
+      "required": false
+    },
+    "minecraft:bow",
+    "minecraft:crossbow",
+    "minecraft:trident",
+    "minecraft:shield",
+    "minecraft:mace",
+    "minecraft:totem_of_undying",
+    "minecraft:wolf_armor"
+  ]
+}

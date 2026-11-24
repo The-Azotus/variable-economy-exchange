@@ -7,7 +7,7 @@ import variableeconomy.exchange.client.ClientExchangeState;
 
 /** The exchange's packets. */
 public final class ExchangeNetwork {
-    private static final String PROTOCOL_VERSION = "1";
+    private static final String PROTOCOL_VERSION = "2";
 
     private ExchangeNetwork() {
     }
@@ -39,8 +39,10 @@ public final class ExchangeNetwork {
                 (payload, context) -> ClientExchangeState.applyExchange(payload));
         registrar.playToClient(ExchangePayloads.ExchangeBook.TYPE, ExchangePayloads.ExchangeBook.CODEC,
                 (payload, context) -> ClientExchangeState.applyBook(payload));
-        registrar.playToClient(ExchangePayloads.ExchangeListings.TYPE, ExchangePayloads.ExchangeListings.CODEC,
-                (payload, context) -> ClientExchangeState.applyListings(payload));
+        registrar.playToClient(ExchangePayloads.ExchangeBrowse.TYPE, ExchangePayloads.ExchangeBrowse.CODEC,
+                (payload, context) -> ClientExchangeState.applyBrowse(payload));
+        registrar.playToClient(ExchangePayloads.ExchangeHistory.TYPE, ExchangePayloads.ExchangeHistory.CODEC,
+                (payload, context) -> ClientExchangeState.applyHistory(payload));
         registrar.playToClient(ExchangePayloads.ExchangeOutcome.TYPE, ExchangePayloads.ExchangeOutcome.CODEC,
                 (payload, context) -> ClientExchangeState.applyOutcome(payload));
     }

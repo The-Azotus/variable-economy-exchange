@@ -1,0 +1,42 @@
+{
+  "values": [
+    {
+      "id": "#c:ores",
+      "required": false
+    },
+    {
+      "id": "#c:raw_materials",
+      "required": false
+    },
+    {
+      "id": "#c:ingots",
+      "required": false
+    },
+    {
+      "id": "#c:gems",
+      "required": false
+    },
+    {
+      "id": "#c:nuggets",
+      "required": false
+    },
+    {
+      "id": "#c:storage_blocks",
+      "required": false
+    },
+    {
+      "id": "#c:dusts",
+      "required": false
+    },
+    {
+      "id": "#minecraft:coals",
+      "required": false
+    },
+    "minecraft:flint",
+    "minecraft:clay_ball",
+    "minecraft:quartz",
+    "minecraft:amethyst_shard",
+    "minecraft:netherite_scrap",
+    "minecraft:ancient_debris"
+  ]
+}

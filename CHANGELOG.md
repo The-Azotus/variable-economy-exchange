@@ -2,6 +2,23 @@
 
 What changed in each release of the exchange, for players and server admins. Mod and add-on authors: the API's changes are in the [add-on guide's changelog](docs/api.md#changelog). Changes to core, and to Variable Economy as a whole, are in [core's changelog](https://github.com/The-Azotus/variable-economy-core/blob/main/CHANGELOG.md).
 
+## Unreleased
+
+**The network protocol changed:** install the same version on the server and every client. Worlds carry over: orders, listings and boxes load as they were.
+
+- **A new Exchange screen, in four tabs.**
+  - **Browse**: everything other players sell, sell orders and listings together, newest first. Search it; narrow it by **category** (Building Blocks, Ores and Minerals, Farming and Food, Weapons and Armor, Tools and Equipment, Mob Drops, Redstone and Technology, Potions and Brewing, Miscellaneous), by a price range and by a smallest quantity; sort it by newest, cheapest, dearest or most available. Click an offer to inspect the whole item (enchantments, durability, name, its ID) and buy from it.
+  - **Exchange**: **Buy** and **Sell** sub-tabs. Pick an item to see its book beside the order form, which shows what the order comes to and how many units would trade at once. An item with data of its own is listed at a fixed price instead, from the same form.
+  - **My Orders**: **Active** shows each open order's progress, its trades so far, and buttons to change its price, lower its quantity or cancel it; **Completed** and **History** show what filled and everything that happened.
+  - **Collection**: **Items received** (collect one line or all; what doesn't fit stays) and **Currency received** (what your sales paid into your bank). The tab is marked while anything waits.
+  - Buying, posting, cancelling and changing an order ask you to confirm first, with what will be taken, held or returned.
+- **Change an order's price**, from My Orders or `/exchange reprice <id> <price>`. The order moves to the back of the queue at its new price and trades at once if it now meets another order. A buy order then holds what its remaining units cost at the new price: more is taken, or the rest comes back. No posting fee. Raising a buy order paid from another account needs that account to be your active one.
+- **Lower an order's or listing's quantity**, from My Orders or `/exchange reduce <id> <qty>`. It keeps its place; what the units held comes back.
+- **History**: each player's trades, and their orders' ends and changes, kept on the server (the last 100 by default; `[history]` `max_per_player`) and shown on the screen and by `/exchange history`.
+- **Buyers who saw an old price are refused**: buying from Browse or filling a picked order sends the price you saw, and nothing is bought if it has changed.
+- **New config:** `[history]` `max_per_player`, `[browse]` `categories` and `[browse]` `creative_tab_fallback`. Categories are item tags (`data/variable_economy_exchange/tags/item/category/`), so a datapack can change them and add more; an item in none of them takes the category its creative tab stands for.
+- The collection box is now called **Collection** everywhere on screen and in messages.
+
 ## 0.6.2 (2026-11-23)
 
 **Install with core 0.6.3 or a later 0.6.x.** The network protocol is unchanged.

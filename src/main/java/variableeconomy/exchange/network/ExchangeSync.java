@@ -33,16 +33,20 @@ public final class ExchangeSync {
     private static final int STATE_INTERVAL_TICKS = 20;
     /** The container ID that sets a slot of the client's own inventory, whatever menu is open. */
     private static final int PLAYER_INVENTORY = -2;
-    /** The most bytes of listings sent at once, in order of item ID; the rest are left out and the screen says so. */
-    private static final int LISTINGS_BUDGET_BYTES = 512 * 1024;
+    /** The most bytes of offers sent at once, newest first; the rest are left out and the screen says so. */
+    private static final int BROWSE_BUDGET_BYTES = 512 * 1024;
+    /** The most bytes of history sent at once, newest first. */
+    private static final int HISTORY_BUDGET_BYTES = 256 * 1024;
 
     private static final Map<UUID, ExchangePayloads.ExchangeState> lastSentState = new HashMap<>();
     /** Each viewer's main inventory as last sent to them (see {@link #syncInventory}). */
     private static final Map<UUID, List<ItemStack>> lastSentItems = new HashMap<>();
     /** The item whose book each viewer last asked for, resent to them whenever the exchange changes. */
     private static final Map<UUID, ResourceLocation> watchedBooks = new HashMap<>();
-    /** Viewers browsing the listings, who get them again whenever the exchange changes. */
-    private static final Set<UUID> watchingListings = new HashSet<>();
+    /** Viewers on the Browse tab, who get every offer again whenever the exchange changes. */
+    private static final Set<UUID> watchingBrowse = new HashSet<>();
+    /** Viewers looking at their history, who get it again whenever the exchange changes. */
+    private static final Set<UUID> watchingHistory = new HashSet<>();
 
     private ExchangeSync() {
     }
@@ -68,7 +72,8 @@ public final class ExchangeSync {
         lastSentState.remove(player.getUUID());
         lastSentItems.remove(player.getUUID());
         watchedBooks.remove(player.getUUID());
-        watchingListings.remove(player.getUUID());
+        watchingBrowse.remove(player.getUUID());
+        watchingHistory.remove(player.getUUID());
         sendState(player);
         sendExchange(player);
     }
@@ -115,7 +120,8 @@ public final class ExchangeSync {
         lastSentState.keySet().retainAll(open);
         lastSentItems.keySet().retainAll(open);
         watchedBooks.keySet().retainAll(open);
-        watchingListings.retainAll(open);
+        watchingBrowse.retainAll(open);
+        watchingHistory.retainAll(open);
         viewers.forEach(ExchangeSync::sendState);
     }
 
@@ -134,7 +140,8 @@ public final class ExchangeSync {
             if (player.isEmpty() || player.get() == viewer) {
                 sendExchange(viewer);
                 sendBook(viewer);
-                sendListings(viewer);
+                sendBrowse(viewer);
+                sendHistory(viewer);
             }
         }
     }
@@ -150,14 +157,20 @@ public final class ExchangeSync {
             return;
         }
         request.book().ifPresentOrElse(item -> watchedBooks.put(player.getUUID(), item), () -> watchedBooks.remove(player.getUUID()));
-        if (request.listings()) {
-            watchingListings.add(player.getUUID());
-        } else {
-            watchingListings.remove(player.getUUID());
-        }
+        watch(watchingBrowse, player, request.browse());
+        watch(watchingHistory, player, request.history());
         sendExchange(player);
         sendBook(player);
-        sendListings(player);
+        sendBrowse(player);
+        sendHistory(player);
+    }
+
+    private static void watch(Set<UUID> watching, ServerPlayer player, boolean on) {
+        if (on) {
+            watching.add(player.getUUID());
+        } else {
+            watching.remove(player.getUUID());
+        }
     }
 
     /** Lists an item from the open exchange screen. */
@@ -183,7 +196,12 @@ public final class ExchangeSync {
                     ? ExchangeService.collectParcel(player, request.orderId())
                     : ExchangeService.collect(player, request.item());
             case BUY_LISTING -> ExchangeService.buyListing(player, request.orderId(), request.quantity(), request.price());
-            case FILL -> ExchangeService.fill(player, request.orderId(), request.quantity());
+            // The screen sends the price the player saw; 0 fills at whatever the order's price is.
+            case FILL -> request.price() > 0
+                    ? ExchangeService.fill(player, request.orderId(), request.quantity(), request.price())
+                    : ExchangeService.fill(player, request.orderId(), request.quantity());
+            case REPRICE -> ExchangeService.reprice(player, request.orderId(), request.price());
+            case REDUCE -> ExchangeService.reduce(player, request.orderId(), request.quantity());
             // Listing comes as its own packet, with the item the player saw.
             case LIST -> new ExchangeService.Outcome(ExchangeService.Action.LIST, ExchangeResult.NOT_LISTED,
                     BuiltInRegistries.ITEM.getDefaultKey(), 0, 0, 0, 0);
@@ -194,7 +212,7 @@ public final class ExchangeSync {
     /** Tells the player how an exchange request went, and refreshes whoever's screen it changed. */
     private static void replyExchange(ServerPlayer player, ExchangeService.Outcome outcome) {
         PacketDistributor.sendToPlayer(player, new ExchangePayloads.ExchangeOutcome(outcome.action(), outcome.item(), outcome.result(),
-                outcome.quantity(), outcome.filled(), outcome.amount(), outcome.listed()));
+                outcome.quantity(), outcome.filled(), outcome.amount(), outcome.orderId(), outcome.listed()));
         if (outcome.ok() && outcome.action() != ExchangeService.Action.COLLECT) {
             broadcastExchange(player.server);
         } else {
@@ -206,19 +224,20 @@ public final class ExchangeSync {
 
     // ---- Sending ---------------------------------------------------------------------------------------------
 
-    /** After the exchange changed: everyone with it open gets it, and the book they're looking at. */
+    /** After the exchange changed: everyone with it open gets it, the book they're looking at, and what else they watch. */
     public static void broadcastExchange(MinecraftServer server) {
-        // Measured and sorted once for every viewer, only if someone is browsing listings.
-        List<SizedListing> listings = null;
+        // Measured and sorted once for every viewer, only if someone is browsing.
+        List<SizedOffer> offers = null;
         for (ServerPlayer player : viewers(server)) {
             sendExchange(player);
             sendBook(player);
-            if (watchingListings.contains(player.getUUID())) {
-                if (listings == null) {
-                    listings = sizedListings(server);
+            if (watchingBrowse.contains(player.getUUID())) {
+                if (offers == null) {
+                    offers = sizedOffers(server);
                 }
-                sendListings(player, listings);
+                sendBrowse(player, offers);
             }
+            sendHistory(player);
         }
     }
 
@@ -234,50 +253,93 @@ public final class ExchangeSync {
         }
     }
 
-    /** A listing and how many bytes its item takes to send. */
-    private record SizedListing(ExchangeData.Listing listing, int bytes) {
+    /**
+     * One offer for sale, a sell order or a listing, with what it's posted by, when, at what price, and how many bytes
+     * its item takes to send.
+     */
+    private record SizedOffer(long id, boolean listing, ItemStack stack, long price, int remaining, UUID owner, long postedDay, int bytes) {
     }
 
-    /** Every listing, in browsing order, measured. */
-    private static List<SizedListing> sizedListings(MinecraftServer server) {
-        return ExchangeData.get(server).listings().stream()
-                .sorted(ExchangeService.BROWSING_ORDER)
-                .map(l -> new SizedListing(l, ExchangeService.encodedSize(l.stack(), server.registryAccess())))
-                .toList();
+    /** Every sell order and listing, newest first, measured. */
+    private static List<SizedOffer> sizedOffers(MinecraftServer server) {
+        ExchangeData data = ExchangeData.get(server);
+        List<SizedOffer> offers = new ArrayList<>();
+        for (ExchangeData.Order o : data.orders()) {
+            if (!o.buy()) {
+                BuiltInRegistries.ITEM.getOptional(o.item()).ifPresent(item -> offers.add(new SizedOffer(o.id(), false, new ItemStack(item),
+                        o.price(), o.remaining(), o.owner(), o.postedDay(), 48)));
+            }
+        }
+        for (ExchangeData.Listing l : data.listings()) {
+            offers.add(new SizedOffer(l.id(), true, l.stack(), l.price(), l.remaining(), l.owner(), l.postedDay(),
+                    ExchangeService.encodedSize(l.stack(), server.registryAccess())));
+        }
+        // IDs never repeat and grow, so the highest is the newest.
+        offers.sort(java.util.Comparator.comparingLong(SizedOffer::id).reversed());
+        return offers;
     }
 
-    /** Every listing the player may see, if they're browsing them, up to {@link #LISTINGS_BUDGET_BYTES}. */
-    private static void sendListings(ServerPlayer player) {
-        if (watchingListings.contains(player.getUUID())) {
-            sendListings(player, sizedListings(player.server));
+    /** Every offer the player may see, if they're browsing, up to {@link #BROWSE_BUDGET_BYTES}. */
+    private static void sendBrowse(ServerPlayer player) {
+        if (watchingBrowse.contains(player.getUUID())) {
+            sendBrowse(player, sizedOffers(player.server));
         }
     }
 
-    /** The listings of {@code all} the player may see, up to {@link #LISTINGS_BUDGET_BYTES}. */
-    private static void sendListings(ServerPlayer player, List<SizedListing> all) {
+    /** The offers of {@code all} the player may see, up to {@link #BROWSE_BUDGET_BYTES}. */
+    private static void sendBrowse(ServerPlayer player, List<SizedOffer> all) {
         int expiry = ExchangeSettings.orderExpiryDays();
         long today = ExchangeService.today(player.server);
-        List<ExchangePayloads.ListingLine> lines = new ArrayList<>();
+        List<ExchangePayloads.OfferLine> lines = new ArrayList<>();
         int bytes = 0;
         boolean more = false;
-        for (SizedListing sized : all) {
-            if (CoreApi.itemGate().isLocked(player, sized.listing().stack().getItem())) {
+        for (SizedOffer offer : all) {
+            if (CoreApi.itemGate().isLocked(player, offer.stack().getItem())) {
                 continue;
             }
-            bytes += sized.bytes() + 64;
-            if (bytes > LISTINGS_BUDGET_BYTES) {
+            bytes += offer.bytes() + 64;
+            if (bytes > BROWSE_BUDGET_BYTES) {
                 more = true;
                 break;
             }
-            lines.add(listingLine(player, sized.listing(), expiry, today));
+            lines.add(new ExchangePayloads.OfferLine(offer.listing(), offer.id(), offer.stack().copy(), offer.price(), offer.remaining(),
+                    ExchangeService.name(player.server, offer.owner()).orElse("?"), offer.owner().equals(player.getUUID()),
+                    daysLeft(offer.postedDay(), expiry, today), Math.max(0, today - offer.postedDay())));
         }
-        PacketDistributor.sendToPlayer(player, new ExchangePayloads.ExchangeListings(lines, more));
+        PacketDistributor.sendToPlayer(player, new ExchangePayloads.ExchangeBrowse(lines, more));
     }
 
-    private static ExchangePayloads.ListingLine listingLine(ServerPlayer viewer, ExchangeData.Listing l, int expiry, long today) {
-        String seller = ExchangeService.name(viewer.server, l.owner()).orElse("?");
-        return new ExchangePayloads.ListingLine(l.id(), l.stack().copy(), l.price(), l.quantity(), l.sold(), seller,
-                l.owner().equals(viewer.getUUID()), expiry > 0 ? Math.max(0, l.postedDay() + expiry - today) : -1);
+    /** The player's history, newest first, if they're looking at it, up to {@link #HISTORY_BUDGET_BYTES}. */
+    private static void sendHistory(ServerPlayer player) {
+        if (!watchingHistory.contains(player.getUUID())) {
+            return;
+        }
+        List<ExchangeData.HistoryEntry> entries = ExchangeData.get(player.server).history(player.getUUID());
+        List<ExchangePayloads.HistoryLine> lines = new ArrayList<>();
+        int bytes = 0;
+        boolean more = false;
+        for (int i = entries.size() - 1; i >= 0; i--) {
+            ExchangeData.HistoryEntry e = entries.get(i);
+            bytes += (e.item().isComponentsPatchEmpty() ? 16 : ExchangeService.encodedSize(e.item(), player.server.registryAccess())) + 64;
+            if (bytes > HISTORY_BUDGET_BYTES) {
+                more = true;
+                break;
+            }
+            String counterparty = e.counterparty().flatMap(id -> ExchangeService.name(player.server, id)).orElse("");
+            lines.add(new ExchangePayloads.HistoryLine(e.kind(), e.side(), e.orderId(), e.item().copy(), e.units(), e.price(), e.amount(),
+                    e.tax(), counterparty, e.time()));
+        }
+        PacketDistributor.sendToPlayer(player, new ExchangePayloads.ExchangeHistory(lines, System.currentTimeMillis(), more));
+    }
+
+    /** Days until a post expires, or -1 when posts don't. */
+    private static long daysLeft(long postedDay, int expiry, long today) {
+        return expiry > 0 ? Math.max(0, postedDay + expiry - today) : -1;
+    }
+
+    private static ExchangePayloads.ListingLine listingLine(ExchangeData.Listing l, int expiry, long today) {
+        return new ExchangePayloads.ListingLine(l.id(), l.stack().copy(), l.price(), l.quantity(), l.sold(), daysLeft(l.postedDay(), expiry, today),
+                Math.max(0, today - l.postedDay()));
     }
 
     /** The exchange as {@code player} sees it. */
@@ -287,10 +349,10 @@ public final class ExchangeSync {
         long today = ExchangeService.today(player.server);
         List<ExchangePayloads.OrderLine> orders = ExchangeService.ordersOf(player.getUUID(), data).stream()
                 .map(o -> new ExchangePayloads.OrderLine(o.id(), o.item(), o.buy(), o.price(), o.quantity(), o.filled(),
-                        expiry > 0 ? Math.max(0, o.postedDay() + expiry - today) : -1, o.heldMoney()))
+                        daysLeft(o.postedDay(), expiry, today), o.heldMoney(), Math.max(0, today - o.postedDay()), o.traded()))
                 .toList();
         List<ExchangePayloads.ListingLine> listings = ExchangeService.listingsOf(player.getUUID(), data).stream()
-                .map(l -> listingLine(player, l, expiry, today))
+                .map(l -> listingLine(l, expiry, today))
                 .toList();
         List<ExchangePayloads.BoxLine> box = data.box(player.getUUID()).entrySet().stream()
                 .map(e -> new ExchangePayloads.BoxLine(e.getKey(), e.getValue()))
@@ -300,6 +362,7 @@ public final class ExchangeSync {
                 .toList();
         return new ExchangePayloads.Exchange(ExchangeService.summaries(player, data), orders, listings, box, parcels,
                 ExchangeSettings.maxOpenOrders(), ExchangeSettings.maxOrderSize(), ExchangeSettings.exchangeTax(), expiry,
-                ExchangeSettings.listingFee());
+                ExchangeSettings.listingFee(),
+                new ExchangePayloads.Categories(ExchangeSettings.categories(), ExchangeSettings.creativeTabFallback()));
     }
 }
