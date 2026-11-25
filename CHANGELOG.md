@@ -2,9 +2,9 @@
 
 What changed in each release of the exchange, for players and server admins. Mod and add-on authors: the API's changes are in the [add-on guide's changelog](docs/api.md#changelog). Changes to core, and to Variable Economy as a whole, are in [core's changelog](https://github.com/The-Azotus/variable-economy-core/blob/main/CHANGELOG.md).
 
-## Unreleased
+## 0.7.0 (2026-11-25)
 
-**The network protocol changed:** install the same version on the server and every client. Worlds carry over: orders, listings and boxes load as they were.
+**Install with core 0.6.3 or a later 0.6.x.** **The network protocol changed:** install the same version on the server and every client. Worlds carry over: orders, listings and boxes load as they were.
 
 - **A new Exchange screen, in four tabs.**
   - **Browse**: everything other players sell, sell orders and listings together, newest first. Search it; narrow it by **category** (Building Blocks, Ores and Minerals, Farming and Food, Weapons and Armor, Tools and Equipment, Mob Drops, Redstone and Technology, Potions and Brewing, Miscellaneous), by a price range and by a smallest quantity; sort it by newest, cheapest, dearest or most available. Click an offer to inspect the whole item (enchantments, durability, name, its ID) and buy from it.

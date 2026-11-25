@@ -44,9 +44,9 @@ configurations {
 
 dependencies {
     compileOnly 'variableeconomy:core:0.6.3'
-    compileOnly 'variableeconomy:exchange:0.6.2'
+    compileOnly 'variableeconomy:exchange:0.7.0'
     localRuntime 'variableeconomy:core:0.6.3'
-    localRuntime 'variableeconomy:exchange:0.6.2'
+    localRuntime 'variableeconomy:exchange:0.7.0'
 }
 ```
 
@@ -133,7 +133,7 @@ These come from core's API, and are described in [core's add-on guide](https://g
 
 ## Changelog
 
-- **Unreleased:** nothing in the API changed. Players can now change an order's price; when the changed order trades at once, each fill posts an `ExchangeTradeEvent`, as posting an order does.
+- **0.7.0 (2026-11-25):** requires core 0.6.3 or a later 0.6.x. Nothing in the API changed. Players can now change an order's price; when the changed order trades at once, each fill posts an `ExchangeTradeEvent`, as posting an order does.
 
 - **0.6.2 (2026-11-23):** requires core 0.6.3 or a later 0.6.x. Nothing in the API changed. The exchange is now on by default.
 
